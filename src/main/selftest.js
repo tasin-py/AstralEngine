@@ -153,7 +153,15 @@ async function run(ctx) {
       step(`wallpaper ${it.type} "${it.title}"`, embedded || process.env.ASTRAL_OFFSCREEN === '1', { embedded, mode: slot.embedMode, ms: Date.now() - t0, size, memMB: Math.round(m.reduce((a, x) => a + x.memory.workingSetSize, 0) / 1024), errorsSoFar: errs });
     }
 
-    if (process.argv.includes('--quick')) return;
+    if (process.argv.includes('--quick')) {
+      // Screenshot of the library with the first tested wallpaper selected (used for the README).
+      if (toTest[0]) {
+        await click('.tab[data-tab="installed"]'); await sleep(1200);
+        await click(`#grid .card[data-id="${toTest[0].id}"]`); await sleep(2000);
+        await cap(ui.webContents, 'ui-library-selected');
+      }
+      return;
+    }
     await multimon();
 
     // ---- Built-in display properties + presets panel ----

@@ -21,6 +21,30 @@
   <img src="docs/images/features.svg" alt="Scene wallpapers, Steam Workshop, video and web, widgets and Rainmeter, light on resources, make it yours" width="100%">
 </p>
 
+> [!IMPORTANT]
+> **Steam Workshop wallpapers need Wallpaper Engine.** The Workshop that Astral browses belongs to Wallpaper Engine on Steam, and Steam only delivers those wallpapers to accounts that **own Wallpaper Engine** (a one-time purchase on Steam) with it **installed**. Without it, you can still browse the Workshop in Astral, but subscribing won't download anything. Astral can't work around this: it's Steam's private link between the Workshop and Wallpaper Engine.
+>
+> You don't have to *run* Wallpaper Engine: keep it installed, turn off its "Start with Windows", and Astral plays your subscribed wallpapers. Without Wallpaper Engine, Astral still plays your own videos, images, GIFs and web wallpapers, plus widgets and Rainmeter skins.
+
+## 📸 Screenshots
+
+<p align="center">
+  <img src="docs/images/screenshot-library.jpg" alt="Astral Engine library with a wallpaper selected and its properties panel" width="100%">
+</p>
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/images/screenshot-widgets.png" alt="Desktop widgets page"></td>
+    <td width="33%"><img src="docs/images/screenshot-rainmeter.png" alt="Rainmeter skin manager"></td>
+    <td width="33%"><img src="docs/images/screenshot-settings.png" alt="Performance settings"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Desktop widgets</sub></td>
+    <td align="center"><sub>Rainmeter skins</sub></td>
+    <td align="center"><sub>Performance settings</sub></td>
+  </tr>
+</table>
+
 ## ⚡ Lighter than Wallpaper Engine
 
 <p align="center">
@@ -52,7 +76,7 @@ To be fair about it: while a wallpaper is *playing*, Wallpaper Engine's native D
 
 **Wallpapers**
 - **Steam Workshop:** finds your Steam libraries and subscribed Wallpaper Engine items automatically. Browse, search and filter the Workshop with no account or API key. Subscribe opens the wallpaper's page in your Steam app (or your web browser, if you prefer), so Astral never asks for your Steam login; it appears in Installed as soon as Steam downloads it (Wallpaper Engine must be owned on that Steam account).
-- **Scene wallpapers:** native renderer for Wallpaper Engine `scene.pkg` files covering images, effects/shaders, particles, text, sounds, parallax, camera shake, SceneScript and audio response.
+- **Scene wallpapers:** native renderer for Wallpaper Engine `scene.pkg` files covering images, effects/shaders, particles, text, sounds, parallax, camera shake, SceneScript and audio response. 3D scenes (built from 3D models, e.g. the built-in Neon Sunset, Arsenal, Demon Core, DNA Fragment and Retro) aren't supported yet and are marked as such.
 - **Video wallpapers:** MP4/WebM/HEVC with hardware decoding, looping, volume and playback rate.
 - **Web wallpapers:** HTML wallpapers with the Wallpaper Engine web API (user properties, audio listener).
 - **Images**, plus drag-and-drop import of your own files and folders.
@@ -114,7 +138,7 @@ Download from the [Releases page](https://github.com/tasin-py/AstralEngine/relea
 - **`AstralEngine-Setup-x.y.z.exe`**: installer. You can choose a folder and install for just you or for everyone; it adds Start-menu and desktop shortcuts and an uninstaller.
 - **`AstralEngine-Portable-x.y.z.exe`**: runs without installing.
 
-Requirements: Windows 10/11 (64-bit). For Workshop content: Steam with Wallpaper Engine owned and the items subscribed.
+Requirements: Windows 10/11 (64-bit). For Workshop content: Steam with **Wallpaper Engine owned and installed** on the same account, and the items subscribed (see the note at the top).
 
 ## 🛠️ Build from source
 
