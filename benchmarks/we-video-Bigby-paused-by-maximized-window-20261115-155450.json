@@ -1,0 +1,73 @@
+{
+  "app": "we",
+  "label": "video Bigby paused by maximized window",
+  "date": "2026-11-15T15:54:50",
+  "seconds": 20,
+  "cores": 12,
+  "totals": {
+    "cpuPct": 3.86,
+    "workingSetMB": 808,
+    "privateMB": 664,
+    "gpuPct": 0.56,
+    "processes": 8
+  },
+  "processes": [
+    {
+      "name": "wallpaper64",
+      "pid": 8208,
+      "cpuPct": 0.08,
+      "workingSetMB": 161,
+      "privateMB": 176
+    },
+    {
+      "name": "wallpaperservice64",
+      "pid": 7516,
+      "cpuPct": 0,
+      "workingSetMB": 8,
+      "privateMB": 1
+    },
+    {
+      "name": "wallpaperui",
+      "pid": 12044,
+      "cpuPct": 0,
+      "workingSetMB": 33,
+      "privateMB": 16
+    },
+    {
+      "name": "wallpaperui",
+      "pid": 26420,
+      "cpuPct": 0.06,
+      "workingSetMB": 196,
+      "privateMB": 105
+    },
+    {
+      "name": "wallpaperui",
+      "pid": 28616,
+      "cpuPct": 1.25,
+      "workingSetMB": 176,
+      "privateMB": 94
+    },
+    {
+      "name": "wallpaperui",
+      "pid": 30600,
+      "cpuPct": 0,
+      "workingSetMB": 39,
+      "privateMB": 14
+    },
+    {
+      "name": "wallpaperui",
+      "pid": 32172,
+      "cpuPct": 2.47,
+      "workingSetMB": 173,
+      "privateMB": 246
+    },
+    {
+      "name": "wallpaperui",
+      "pid": 34576,
+      "cpuPct": 0,
+      "workingSetMB": 22,
+      "privateMB": 12
+    }
+  ],
+  "note": "WE paused itself (its rule: pause when another app is maximized). UI window open."
+}

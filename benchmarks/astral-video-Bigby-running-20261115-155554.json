@@ -1,0 +1,38 @@
+{
+  "app": "astral",
+  "label": "video Bigby running",
+  "date": "2026-11-15T15:55:54",
+  "seconds": 20,
+  "cores": 12,
+  "totals": {
+    "cpuPct": 2.56,
+    "workingSetMB": 372,
+    "privateMB": 265,
+    "gpuPct": 12.55,
+    "processes": 3
+  },
+  "processes": [
+    {
+      "name": "electron",
+      "pid": 32808,
+      "cpuPct": 0.66,
+      "workingSetMB": 125,
+      "privateMB": 78
+    },
+    {
+      "name": "electron",
+      "pid": 33492,
+      "cpuPct": 1.6,
+      "workingSetMB": 126,
+      "privateMB": 98
+    },
+    {
+      "name": "electron",
+      "pid": 36492,
+      "cpuPct": 0.3,
+      "workingSetMB": 121,
+      "privateMB": 89
+    }
+  ],
+  "note": "Playback forced to keep running; UI closed. Wallpaper Engine was paused at the time, so there is no matching WE row yet."
+}

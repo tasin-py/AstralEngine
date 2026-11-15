@@ -1,0 +1,12 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' astral: blob: data:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' astral: blob: data:; media-src astral: blob:; connect-src astral: blob: data:; font-src astral: data: 'self'">
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;cursor:none}
+#stage,#stage>*{position:absolute;inset:0;width:100%;height:100%}
+video,img{object-fit:cover;display:block}
+.msg{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);color:#9aa;font:16px Segoe UI,sans-serif;text-align:center}
+</style></head>
+<body><div id="stage"></div>
+<script type="module" src="host.js"></script>
+</body></html>

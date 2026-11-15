@@ -1,0 +1,104 @@
+{
+  "name": "astral-engine",
+  "productName": "Astral Engine",
+  "version": "1.0.0",
+  "description": "Lightweight live wallpaper app for Windows: Steam Workshop scenes, videos and web wallpapers, desktop widgets and Rainmeter support.",
+  "main": "src/main/main.js",
+  "author": "tasinpy",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/unit.test.mjs",
+    "selftest": "electron . --selftest",
+    "dist": "electron-builder --win nsis portable --x64",
+    "bench:we": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bench-processes.ps1 -App we -Label playing -Seconds 20",
+    "bench:report": "node scripts/bench-report.js",
+    "dist:art": "electron scripts/make-installer-art.js",
+    "bench:astral": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bench-processes.ps1 -App astral -Label playing -Seconds 20"
+  },
+  "dependencies": {
+    "koffi": "2.16.4"
+  },
+  "devDependencies": {
+    "electron": "45.3.2",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.tasinpy.astralengine",
+    "productName": "Astral Engine",
+    "copyright": "Copyright © 2026 tasinpy",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json",
+      "!**/*.map",
+      "!node_modules/koffi/build/koffi/!(win32_x64)/**",
+      "!node_modules/koffi/src/**",
+      "!node_modules/koffi/doc/**",
+      "!node_modules/koffi/vendor/**",
+      "!node_modules/koffi/*.md"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/build/**"
+    ],
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "AstralEngine-Setup-${version}.${ext}",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Astral Engine",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "include": "build/installer.nsh",
+      "menuCategory": false,
+      "artifactName": "AstralEngine-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "AstralEngine-Portable-${version}.${ext}"
+    },
+    "publish": null
+  },
+  "homepage": "https://github.com/tasin-py/AstralEngine",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tasin-py/AstralEngine.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tasin-py/AstralEngine/issues"
+  }
+}

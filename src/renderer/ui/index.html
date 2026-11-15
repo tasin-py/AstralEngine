@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' astral: https: data: blob:; media-src astral: blob:; connect-src 'self' astral:; font-src 'self' data:">
+<title>Astral Engine</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header id="titlebar">
+  <div class="tb-left"><img src="../../../assets/icon.png" class="tb-icon" alt=""><span id="tb-title">Astral Engine</span></div>
+  <div class="tb-drag"></div>
+  <div class="tb-right">
+    <button class="tb-btn" id="tb-panel" title="Toggle details panel" data-icon="panel"></button>
+    <button class="tb-btn" id="tb-min" title="Minimize" data-icon="min"></button>
+    <button class="tb-btn" id="tb-max" title="Maximize" data-icon="max"></button>
+    <button class="tb-btn tb-close" id="tb-close" title="Close" data-icon="close"></button>
+  </div>
+</header>
+
+<div id="app">
+  <main id="main">
+    <nav id="tabs">
+      <div class="tabgroup">
+        <div class="tab-split">
+          <button class="tab active" data-tab="installed"><i data-icon="save"></i><span id="installed-label">Installed</span></button>
+          <button class="tab-caret" id="installed-menu-btn" title="Show"><i data-icon="caret"></i></button>
+        </div>
+        <button class="tab" data-tab="discover"><i data-icon="compass"></i>Discover</button>
+        <button class="tab" data-tab="workshop"><i data-icon="steam"></i>Workshop</button>
+        <button class="tab" data-tab="widgets"><i data-icon="widgets"></i>Widgets</button>
+        <button class="tab" data-tab="rainmeter"><i data-icon="drop"></i>Rainmeter</button>
+      </div>
+      <div class="tabgroup right">
+        <button class="btn btn-dark" id="btn-pause" title="Pause / resume all wallpapers"><i data-icon="pause"></i><span>Pause</span></button>
+        <button class="btn btn-dark" id="btn-displays"><i data-icon="display"></i>Displays</button>
+        <button class="btn btn-dark" id="btn-settings"><i data-icon="gear"></i>Settings</button>
+      </div>
+    </nav>
+    <div class="tabline"></div>
+
+    <section id="browser">
+      <div id="toolbar">
+        <div class="search"><input id="search" type="text" placeholder="Search" spellcheck="false"><i data-icon="search"></i></div>
+        <button class="btn btn-accent" id="btn-filter"><i data-icon="filter"></i>Filter results</button>
+        <div class="grow"></div>
+        <select id="sort" class="select"></select>
+      </div>
+      <div id="content">
+        <aside id="filters" hidden></aside>
+        <div id="gridwrap">
+          <div id="grid" class="grid"></div>
+          <div id="empty" class="empty" hidden></div>
+          <div id="pager" class="pager" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="page-widgets" class="page" hidden></section>
+    <section id="page-rainmeter" class="page" hidden></section>
+
+    <footer id="footer">
+      <div class="playlist-row">
+        <span class="pl-title">Playlist</span>
+        <button class="btn btn-dark" id="pl-load"><i data-icon="folder"></i>Load</button>
+        <button class="btn btn-dark" id="pl-save"><i data-icon="save"></i>Save</button>
+        <button class="btn btn-dark" id="pl-config"><i data-icon="gears"></i>Configure</button>
+        <button class="btn btn-accent" id="pl-add"><i data-icon="plus"></i>Add wallpaper</button>
+        <span id="pl-status" class="muted"></span>
+      </div>
+      <div class="bottom-row">
+        <button class="btn btn-accent wide" id="btn-open-wallpaper"><i data-icon="upload"></i>Open Wallpaper</button>
+        <button class="btn btn-dark wide" id="btn-open-folder"><i data-icon="folder"></i>Open Folder</button>
+        <div class="grow"></div>
+        <span id="status-line" class="muted"></span>
+      </div>
+    </footer>
+  </main>
+
+  <aside id="panel">
+    <div id="details"></div>
+    <div id="panel-actions">
+      <button class="btn btn-accent" id="btn-ok">OK</button>
+      <button class="btn btn-dark" id="btn-cancel">Cancel</button>
+    </div>
+  </aside>
+</div>
+
+<div id="modal-root"></div>
+<div id="toast-root"></div>
+<div id="menu-root"></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>

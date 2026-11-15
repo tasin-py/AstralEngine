@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- Astral Engine logo: a 2D Saturn with sparkling stars -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2a1f63"/>
+      <stop offset="0.55" stop-color="#151236"/>
+      <stop offset="1" stop-color="#0a0b1e"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.52" r="0.5">
+      <stop offset="0" stop-color="#8b6cff" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#8b6cff" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="planet" x1="0.2" y1="0.1" x2="0.8" y2="0.95">
+      <stop offset="0" stop-color="#ffe29a"/>
+      <stop offset="0.45" stop-color="#ffab5e"/>
+      <stop offset="1" stop-color="#d4557a"/>
+    </linearGradient>
+    <radialGradient id="shade" cx="0.32" cy="0.28" r="0.85">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#3a1240" stop-opacity="0.45"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b9a4ff"/>
+      <stop offset="0.5" stop-color="#fff1c9"/>
+      <stop offset="1" stop-color="#9fd0ff"/>
+    </linearGradient>
+    <clipPath id="planetClip"><circle cx="0" cy="0" r="112"/></clipPath>
+    <filter id="sparkle" x="-1" y="-1" width="3" height="3">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <circle cx="256" cy="256" r="244" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="242" fill="none" stroke="#8b6cff" stroke-opacity="0.35" stroke-width="3"/>
+  <circle cx="256" cy="262" r="220" fill="url(#glow)"/>
+
+  <!-- tiny background stars -->
+  <g fill="#ffffff">
+    <circle cx="92" cy="206" r="3" opacity="0.7"/>
+    <circle cx="160" cy="84" r="2.5" opacity="0.6"/>
+    <circle cx="430" cy="236" r="3" opacity="0.65"/>
+    <circle cx="350" cy="442" r="2.5" opacity="0.55"/>
+    <circle cx="120" cy="420" r="3" opacity="0.6"/>
+    <circle cx="300" cy="66" r="2" opacity="0.5"/>
+  </g>
+
+  <g transform="translate(256 268) rotate(-22) scale(0.94)">
+    <!-- back half of the ring (behind the planet) -->
+    <path d="M -212 0 A 212 64 0 0 1 212 0" fill="none" stroke="url(#ring)" stroke-width="22" stroke-linecap="round" opacity="0.85"/>
+    <path d="M -178 0 A 178 50 0 0 1 178 0" fill="none" stroke="#1b1640" stroke-width="5" opacity="0.6"/>
+
+    <!-- planet -->
+    <circle cx="0" cy="0" r="112" fill="url(#planet)"/>
+    <g clip-path="url(#planetClip)" opacity="0.35">
+      <rect x="-130" y="-58" width="260" height="16" fill="#fff4d6"/>
+      <rect x="-130" y="-14" width="260" height="22" fill="#b8426a"/>
+      <rect x="-130" y="34" width="260" height="12" fill="#fff4d6"/>
+      <rect x="-130" y="68" width="260" height="18" fill="#9c3560"/>
+    </g>
+    <circle cx="0" cy="0" r="112" fill="url(#shade)"/>
+
+    <!-- front half of the ring (over the planet) -->
+    <path d="M -212 0 A 212 64 0 0 0 212 0" fill="none" stroke="url(#ring)" stroke-width="22" stroke-linecap="round"/>
+    <path d="M -178 0 A 178 50 0 0 0 178 0" fill="none" stroke="#1b1640" stroke-width="5" opacity="0.55"/>
+  </g>
+
+  <!-- sparkling stars -->
+  <g fill="#ffffff" filter="url(#sparkle)">
+    <path transform="translate(368 136)" d="M0 -46 Q5 -5 46 0 Q5 5 0 46 Q-5 5 -46 0 Q-5 -5 0 -46 Z"/>
+    <path transform="translate(134 140)" d="M0 -26 Q3 -3 26 0 Q3 3 0 26 Q-3 3 -26 0 Q-3 -3 0 -26 Z"/>
+    <path transform="translate(390 384)" d="M0 -22 Q2.5 -2.5 22 0 Q2.5 2.5 0 22 Q-2.5 2.5 -22 0 Q-2.5 -2.5 0 -22 Z" fill="#cfe6ff"/>
+  </g>
+</svg>

@@ -1,0 +1,38 @@
+{
+  "app": "astral",
+  "label": "video Bigby paused by maximized window",
+  "date": "2026-11-15T15:57:15",
+  "seconds": 20,
+  "cores": 12,
+  "totals": {
+    "cpuPct": 0.14,
+    "workingSetMB": 156,
+    "privateMB": 238,
+    "gpuPct": 0,
+    "processes": 3
+  },
+  "processes": [
+    {
+      "name": "electron",
+      "pid": 17148,
+      "cpuPct": 0.1,
+      "workingSetMB": 32,
+      "privateMB": 80
+    },
+    {
+      "name": "electron",
+      "pid": 21448,
+      "cpuPct": 0.03,
+      "workingSetMB": 11,
+      "privateMB": 61
+    },
+    {
+      "name": "electron",
+      "pid": 36636,
+      "cpuPct": 0,
+      "workingSetMB": 113,
+      "privateMB": 97
+    }
+  ],
+  "note": "Same rule as WE (pause when maximized). Astral UI closed (closing it frees its memory); WE UI was open, so compare the \"wallpaper only\" row for a fair number."
+}
