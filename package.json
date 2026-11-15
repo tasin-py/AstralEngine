@@ -1,7 +1,7 @@
 {
   "name": "astral-engine",
   "productName": "Astral Engine",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "Lightweight live wallpaper app for Windows: Steam Workshop scenes, videos and web wallpapers, desktop widgets and Rainmeter support.",
   "main": "src/main/main.js",
   "author": "tasinpy",

@@ -1,4 +1,4 @@
-Astral Engine 1.2.0 - third-party notices
+Astral Engine 1.2.2 - third-party notices
 
 Astral Engine itself is released under the MIT licence (see LICENSE).
 It includes the following third-party software, each under its own licence.

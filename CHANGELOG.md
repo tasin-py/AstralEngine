@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.2.2
+
+- Uninstaller: "Also uninstall Rainmeter" checkbox (unticked by default). Removes the Rainmeter Astral installed, or runs a normal Rainmeter installation's own uninstaller. Skins in Documents\Rainmeter are kept. A portable Rainmeter inside the Astral folder is always removed with it.
+- README: screenshots and a note that Workshop wallpapers need Wallpaper Engine owned and installed.
+
 ## 1.2.0
 
 ### Wallpapers and displays
