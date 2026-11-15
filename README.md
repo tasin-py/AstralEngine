@@ -1,19 +1,54 @@
-<p align="center"><img src="assets/icon512.png" width="112" alt="Astral Engine icon"></p>
-
-<h1 align="center">Astral Engine</h1>
-
 <p align="center">
-Lightweight live wallpapers for Windows. Plays your Steam Workshop scenes, videos and web wallpapers,<br>
-with desktop widgets and Rainmeter support, and a familiar dark UI.
+  <img src="docs/images/banner.svg" alt="Astral Engine: live wallpapers for Windows" width="100%">
 </p>
 
 <p align="center">
-  <a href="https://www.supportkori.com/tasinpy"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-support-ffdd00?logo=buymeacoffee&logoColor=black"></a>
+  <a href="https://github.com/tasin-py/AstralEngine/releases/latest"><img alt="Download" src="https://img.shields.io/github/v/release/tasin-py/AstralEngine?label=Download&style=for-the-badge&color=8b6cff&labelColor=17133f"></a>
+  <img alt="Windows 10/11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-ffab5e?style=for-the-badge&logo=windows11&logoColor=white&labelColor=17133f">
+  <img alt="MIT license" src="https://img.shields.io/badge/License-MIT-9fd0ff?style=for-the-badge&labelColor=17133f">
+  <a href="https://www.supportkori.com/tasinpy"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95-ffdd00?style=for-the-badge&labelColor=17133f"></a>
 </p>
 
----
+<p align="center">
+  <b>Your Wallpaper Engine library, lighter.</b><br>
+  Scenes, videos and web wallpapers from the Steam Workshop, plus widgets and Rainmeter,<br>
+  in a dark, familiar app that gets out of the way when you're working.
+</p>
 
-## Features
+<br>
+
+<p align="center">
+  <img src="docs/images/features.svg" alt="Scene wallpapers, Steam Workshop, video and web, widgets and Rainmeter, light on resources, make it yours" width="100%">
+</p>
+
+## ⚡ Lighter than Wallpaper Engine
+
+<p align="center">
+  <img src="docs/images/benchmark.svg" alt="Astral uses 81% less RAM, 96% less CPU and no GPU while idle compared with Wallpaper Engine" width="100%">
+</p>
+
+Both apps were measured with the same script on the same PC with the same Workshop video. The headline numbers are for the whole app while a maximized window pauses the wallpaper. Wallpaper Engine keeps its library UI running in the background (6 processes, about 640 MB); Astral frees its window when you close it.
+
+<details>
+<summary><b>Full numbers and method</b></summary>
+
+| Scenario | Wallpaper Engine | Astral Engine |
+|---|---:|---:|
+| Paused, everything running in the background | 808 MB RAM · 3.86 % CPU | **156 MB RAM · 0.14 % CPU** |
+| Paused, wallpaper processes only | 169 MB RAM · 0.08 % CPU | **156 MB RAM · 0.14 % CPU** |
+| Video playing, library closed | *not measured yet* | 372 MB RAM · 2.56 % CPU |
+| Scene playing, library closed | – | 427 MB RAM · 1.74 % CPU |
+
+Measured with `scripts/bench-processes.ps1`. Raw data and per-process detail are in [`benchmarks/`](benchmarks/RESULTS.md).
+
+To be fair about it: while a wallpaper is *playing*, Wallpaper Engine's native D3D11 renderer still uses less RAM than Astral's Chromium-based one. Astral wins by unloading everything it isn't using.
+
+</details>
+
+## ✨ All features
+
+<details open>
+<summary><b>Everything Astral can do</b></summary>
 
 **Wallpapers**
 - **Steam Workshop:** finds your Steam libraries and subscribed Wallpaper Engine items automatically. Browse, search, filter, subscribe and unsubscribe in the app (Steam downloads the files; Wallpaper Engine must be owned on that Steam account).
@@ -45,23 +80,9 @@ with desktop widgets and Rainmeter support, and a familiar dark UI.
 - **Buy Me a Coffee** button in Settings › About & Support and in the tray menu.
 - Dark installer with a choice of install folder, plus a portable build.
 
-## Resource usage vs Wallpaper Engine
+</details>
 
-Both apps were measured with the same script (`scripts/bench-processes.ps1`) on the same machine and the same Workshop video. Full data and per-process detail are in [`benchmarks/`](benchmarks/RESULTS.md).
-
-| Scenario | Wallpaper Engine | Astral Engine |
-|---|---:|---:|
-| Paused (maximized window), wallpaper processes only | 169 MB RAM · 0.08 % CPU | **156 MB RAM · 0.14 % CPU** |
-| Paused, everything running in the background¹ | 808 MB RAM · 3.86 % CPU | **156 MB RAM · 0.14 % CPU** |
-| Video playing, UI closed | *not measured yet²* | 372 MB RAM · 2.56 % CPU |
-| Scene playing, UI closed (self-test) | – | 427 MB RAM · 1.74 % CPU |
-
-¹ Wallpaper Engine keeps its library UI processes alive (6 processes, about 640 MB). Astral destroys its window when you close it.
-² Wallpaper Engine paused itself during the measurement because a window was maximized. Run `npm run bench:we` and `npm run bench:astral` with no maximized windows, then `npm run bench:report`.
-
-Honest summary: when paused or idle, Astral uses about the same memory as Wallpaper Engine's core process and far less than Wallpaper Engine with its UI. While playing, Wallpaper Engine's native D3D11 engine is still leaner on RAM than Chromium-based rendering.
-
-## Astral vs Wallpaper Engine: what each can do
+## 🆚 Astral vs Wallpaper Engine: what each can do
 
 | Feature | Wallpaper Engine | Astral |
 |---|:---:|:---:|
@@ -87,7 +108,7 @@ Honest summary: when paused or idle, Astral uses about the same memory as Wallpa
 
 Astral reads Wallpaper Engine files **read-only**. It never modifies the Wallpaper Engine installation or your Workshop downloads.
 
-## Install
+## 📥 Install
 
 Download from the [Releases page](https://github.com/tasin-py/AstralEngine/releases/latest):
 - **`AstralEngine-Setup-x.y.z.exe`**: installer. You can choose a folder and install for just you or for everyone; it adds Start-menu and desktop shortcuts and an uninstaller.
@@ -95,7 +116,7 @@ Download from the [Releases page](https://github.com/tasin-py/AstralEngine/relea
 
 Requirements: Windows 10/11 (64-bit). For Workshop content: Steam with Wallpaper Engine owned and the items subscribed.
 
-## Build from source
+## 🛠️ Build from source
 
 ```bash
 git clone https://github.com/tasin-py/AstralEngine.git
@@ -118,14 +139,18 @@ To ship an update:
 2. Create a GitHub release tagged `v1.0.1` and attach `dist/AstralEngine-Setup-1.0.1.exe` (and the portable exe if you like).
 3. Installed copies see the update on their next check, then download and run the installer for the user.
 
-## How it works
+## 🔭 How it works
 
 See [docs/HOW_WALLPAPER_ENGINE_WORKS.md](docs/HOW_WALLPAPER_ENGINE_WORKS.md) for how desktop embedding, the scene format, textures, shaders and Workshop access work, and how Astral implements each.
 
-## Support
+## ☕ Support
 
-If you like the app: **[Buy Me a Coffee ☕](https://www.supportkori.com/tasinpy)**
+Astral is free and always will be. If it made your desktop nicer, a coffee keeps the stars spinning.
 
-## License
+<p align="center">
+  <a href="https://www.supportkori.com/tasinpy"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-%E2%98%95%20support%20Astral-ffdd00?style=for-the-badge&labelColor=17133f"></a>
+</p>
+
+## 📄 License
 
 MIT. Wallpaper Engine is a product of its respective owners. Astral is an independent project and isn't affiliated with Wallpaper Engine or Valve. Workshop content belongs to its authors.

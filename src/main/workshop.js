@@ -31,7 +31,7 @@ function parseIds(html) {
 }
 
 function parseTotal(html) {
-  const m = html.match(/of\s+([\d,]+)\s+entries/i);
+  const m = html.match(/of\s+([\d,]+)\s+entries/i) || html.match(/([\d,]+)\s+entries\s+matching/i);
   return m ? Number(m[1].replace(/,/g, '')) : null;
 }
 
@@ -79,6 +79,33 @@ function normalize(d) {
   };
 }
 
+const TYPES = ['Scene', 'Video', 'Web', 'Application'];
+const RATINGS = ['Everyone', 'Questionable', 'Mature'];
+const GENRES = ['Abstract', 'Animal', 'Anime', 'Cartoon', 'CGI', 'Cyberpunk', 'Fantasy', 'Game', 'Girls', 'Landscape', 'Medieval', 'Memes', 'MMD', 'Music', 'Nature', 'Pixel art', 'Relaxing', 'Retro', 'Sci-Fi', 'Sports', 'Technology', 'Television', 'Vehicle'];
+
+/**
+ * Steam only supports "has ALL of these tags" (requiredtags) and "has none of these" (excludedtags),
+ * and the public pages ignore match_all_tags. Checking several types, ratings or genres should mean
+ * "any of them" (as in Wallpaper Engine), so a group with several boxes checked becomes "exclude the
+ * unchecked ones", plus a client-side "has at least one" check for genres. Misc tags stay required.
+ */
+function tagQuery(opts) {
+  const required = [], excluded = [];
+  const group = (all, picked) => {
+    const on = all.filter((t) => picked.includes(t));
+    if (!on.length || on.length === all.length) return [];
+    if (on.length === 1) { required.push(on[0]); return []; }
+    excluded.push(...all.filter((t) => !on.includes(t)));
+    return on;
+  };
+  const tags = opts.tags || [];
+  group(TYPES, opts.types || []);
+  group(RATINGS, opts.ratings && opts.ratings.length ? opts.ratings : ['Everyone']);
+  const anyOf = group(GENRES, tags);
+  required.push(...tags.filter((t) => !GENRES.includes(t)));
+  return { required, excluded, anyOf };
+}
+
 /**
  * Browse / search the Workshop.
  * opts: { page, sort, search, types:[], tags:[], ratings:[], days, apiKey }
@@ -87,8 +114,8 @@ async function browse(opts = {}) {
   const page = Math.max(1, opts.page || 1);
   const sort = SORTS[opts.sort] || SORTS.trend;
   const perPage = 30;
-  const tags = [...(opts.types || []), ...(opts.tags || [])];
-  const ratings = opts.ratings && opts.ratings.length ? opts.ratings : ['Everyone'];
+  const { required, excluded, anyOf } = tagQuery(opts);
+  const keep = (it) => !anyOf.length || (it.tags || []).some((t) => anyOf.includes(t));
 
   if (opts.apiKey) {
     const p = new URLSearchParams({
@@ -96,14 +123,14 @@ async function browse(opts = {}) {
       appid: APPID, return_tags: 'true', return_previews: 'false', search_text: opts.search || '',
       match_all_tags: 'true', days: String(opts.days || 7), filetype: '0'
     });
-    tags.forEach((t, i) => p.set(`requiredtags[${i}]`, t));
-    if (ratings.length === 1) p.set(`requiredtags[${tags.length}]`, ratings[0]);
+    required.forEach((t, i) => p.set(`requiredtags[${i}]`, t));
+    excluded.forEach((t, i) => p.set(`excludedtags[${i}]`, t));
     const r = await fetch('https://api.steampowered.com/IPublishedFileService/QueryFiles/v1/?' + p, { headers: { 'User-Agent': UA } });
     if (r.ok) {
       const j = await r.json();
       const files = (j.response && j.response.publishedfiledetails) || [];
       const total = (j.response && j.response.total) || 0;
-      const items = files.map(normalize);
+      const items = files.map(normalize).filter(keep);
       items.forEach((it) => detailCache.set(it.id, { at: Date.now(), data: it }));
       return { page, total, pages: Math.ceil(total / perPage), items };
     }
@@ -117,15 +144,15 @@ async function browse(opts = {}) {
   if (opts.search) q.set('searchtext', opts.search);
   if (sort.browsesort === 'trend') q.set('days', String(opts.days || 7));
   const parts = [q.toString()];
-  for (const t of tags) parts.push('requiredtags%5B%5D=' + encodeURIComponent(t));
-  if (ratings.length === 1) parts.push('requiredtags%5B%5D=' + encodeURIComponent(ratings[0]));
+  for (const t of required) parts.push('requiredtags%5B%5D=' + encodeURIComponent(t));
+  for (const t of excluded) parts.push('excludedtags%5B%5D=' + encodeURIComponent(t));
   const url = 'https://steamcommunity.com/workshop/browse/?' + parts.join('&');
   const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en' } });
   if (!r.ok) throw new Error('Workshop unavailable (' + r.status + ')');
   const html = await r.text();
   const ids = parseIds(html).slice(0, perPage);
   let items = await getDetails(ids);
-  items = items.filter((i) => i.ok && !i.banned && (ratings.length !== 1 || ratings.includes(i.rating)));
+  items = items.filter((i) => i.ok && !i.banned && !excluded.includes(i.rating) && keep(i));
   const total = parseTotal(html);
   return { page, total, pages: total ? Math.ceil(total / perPage) : (ids.length >= perPage ? page + 1 : page), items };
 }
@@ -169,4 +196,4 @@ async function setSubscribed(id, subscribe) {
   return true;
 }
 
-module.exports = { browse, getDetails, parseIds, parseTotal, normalize, useSession, isLoggedIn, setSubscribed, SORTS, APPID };
+module.exports = { browse, tagQuery, getDetails, parseIds, parseTotal, normalize, useSession, isLoggedIn, setSubscribed, SORTS, APPID };

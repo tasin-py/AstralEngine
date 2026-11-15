@@ -114,3 +114,17 @@ test('real Wallpaper Engine textures decode (skipped if WE is not installed)', {
     assert.ok(t.width > 0 && t.height > 0, f);
   }
 });
+
+test('workshop filters: several checked boxes mean "any of them"', () => {
+  const { tagQuery, parseTotal } = require('../src/main/workshop.js');
+  // Several types + genres: exclude the unchecked ones instead of requiring all (which matched nothing).
+  const q = tagQuery({ types: ['Scene', 'Video', 'Web'], ratings: ['Everyone'], tags: ['Abstract', 'Animal', 'Audio responsive'] });
+  assert.deepEqual(q.required, ['Everyone', 'Audio responsive']);
+  assert.ok(q.excluded.includes('Application') && q.excluded.includes('Anime') && !q.excluded.includes('Abstract'));
+  assert.deepEqual(q.anyOf, ['Abstract', 'Animal']);
+  // One checked box is required; none or all checked means no filter.
+  assert.deepEqual(tagQuery({ types: ['Video'], ratings: ['Everyone', 'Questionable', 'Mature'], tags: [] }), { required: ['Video'], excluded: [], anyOf: [] });
+  assert.deepEqual(tagQuery({}).required, ['Everyone']);
+  assert.equal(parseTotal('<div>71,680 entries matching filters</div>'), 71680);
+  assert.equal(parseTotal('Showing 1-30 of 1,234 entries'), 1234);
+});
