@@ -34,4 +34,5 @@
 - FPS limit can be typed as a number; mouse wheel moves sliders.
 - Update repository link is read-only.
 - Installer: white option text, desktop shortcut and start-with-Windows options (ticked by default), pinning tip.
+- Uninstaller: "Also uninstall Rainmeter" checkbox (unticked by default). Removes the Rainmeter Astral installed, or runs a normal Rainmeter installation's own uninstaller. Skins in Documents\Rainmeter are kept.
 - Open-source licences: About > Open-source licences (THIRD_PARTY_NOTICES.txt ships with the app).
