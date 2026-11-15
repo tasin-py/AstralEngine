@@ -2,9 +2,7 @@
 // Steam Workshop browsing for Wallpaper Engine items (app 431960).
 // - Browse/search: public Workshop pages (or the official Web API when the user adds a key)
 // - Details: ISteamRemoteStorage/GetPublishedFileDetails (public, no key)
-// - Subscribe/unsubscribe: done as the signed-in Steam Community user, exactly like the
-//   Subscribe button on the website. The Steam client then downloads the item, which
-//   requires that the account owns Wallpaper Engine.
+// - Subscribe/unsubscribe: opens the item in the Steam app; Astral never handles the Steam login.
 
 const APPID = '431960';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36';
@@ -157,43 +155,4 @@ async function browse(opts = {}) {
   return { page, total, pages: total ? Math.ceil(total / perPage) : (ids.length >= perPage ? page + 1 : page), items };
 }
 
-// ---- Account actions through the Steam Community web session ----
-let steamSession = null;
-function useSession(ses) { steamSession = ses; }
-
-async function sessionId() {
-  if (!steamSession) return null;
-  const c = await steamSession.cookies.get({ url: 'https://steamcommunity.com', name: 'sessionid' });
-  return c[0] ? c[0].value : null;
-}
-
-async function isLoggedIn() {
-  if (!steamSession) return false;
-  const c = await steamSession.cookies.get({ url: 'https://steamcommunity.com', name: 'steamLoginSecure' });
-  return c.length > 0;
-}
-
-async function setSubscribed(id, subscribe) {
-  if (!steamSession) throw new Error('Steam session not ready');
-  if (!(await isLoggedIn())) { const e = new Error('Sign in to Steam first'); e.code = 'LOGIN'; throw e; }
-  let sid = await sessionId();
-  if (!sid) {
-    await steamSession.fetch('https://steamcommunity.com/', { headers: { 'User-Agent': UA } });
-    sid = await sessionId();
-  }
-  const body = new URLSearchParams({ id: String(id), appid: APPID, sessionid: sid || '' });
-  const url = `https://steamcommunity.com/sharedfiles/${subscribe ? 'subscribe' : 'unsubscribe'}`;
-  const r = await steamSession.fetch(url, {
-    method: 'POST', body: body.toString(),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8', 'User-Agent': UA, Origin: 'https://steamcommunity.com', Referer: `https://steamcommunity.com/sharedfiles/filedetails/?id=${id}` }
-  });
-  const txt = await r.text();
-  let j = null;
-  try { j = JSON.parse(txt); } catch { /* not json */ }
-  if (!r.ok || !j || (j.success !== 1 && j.success !== true)) {
-    throw new Error('Steam refused the request' + (j && j.success ? ' (code ' + j.success + ')' : ''));
-  }
-  return true;
-}
-
-module.exports = { browse, tagQuery, getDetails, parseIds, parseTotal, normalize, useSession, isLoggedIn, setSubscribed, SORTS, APPID };
+module.exports = { browse, tagQuery, getDetails, parseIds, parseTotal, normalize, SORTS, APPID };

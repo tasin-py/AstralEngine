@@ -11,16 +11,17 @@ const state = {
   tab: 'installed', view: 'all', items: [], settings: null, info: null, wp: null,
   search: '', sort: 'name', filters: { types: new Set(), ratings: new Set(['Everyone', 'Questionable']), sources: new Set(), favorites: false, audio: false },
   selected: null, selectedWs: null, slot: null, revert: null,
-  ws: { page: 1, pages: 1, sort: 'trend', items: [], loading: false, types: new Set(), ratings: new Set(['Everyone']), tags: new Set(), loggedIn: false, pending: new Map() },
+  ws: { page: 1, pages: 1, sort: 'trend', items: [], loading: false, types: new Set(), ratings: new Set(['Everyone']), tags: new Set(), pending: new Map() },
   disc: null
 };
 
 // ---------------------------------------------------------------- utils
 function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); const n = t.content.firstElementChild; hydrateIcons(n); return n; }
-function toast(msg, kind = '') {
+function toast(msg, kind = '', action) {
   const t = el(`<div class="toast ${kind}">${esc(msg)}</div>`);
+  if (action) { const b = el(`<button class="toast-act">${esc(action.label)}</button>`); b.onclick = () => { t.remove(); action.click(); }; t.appendChild(b); }
   $('#toast-root').appendChild(t);
-  setTimeout(() => t.remove(), kind === 'err' ? 6000 : 3500);
+  setTimeout(() => t.remove(), action ? 9000 : kind === 'err' ? 6000 : 3500);
 }
 async function safe(fn, okMsg) {
   try { const r = await fn(); if (okMsg) toast(okMsg, 'ok'); return r; } catch (e) { toast(e.message || String(e), 'err'); return undefined; }
@@ -123,18 +124,20 @@ async function boot() {
   if (state.panelHidden) document.body.classList.add('panel-hidden');
   bindChrome();
   state.wp = await api('wp:status');
-  state.slot = state.wp.layout === 'per-monitor' ? (state.wp.displays.find((d) => d.primary) || state.wp.displays[0] || {}).id : state.wp.layout;
+  state.slot = null; fixTarget();
   await loadLibrary();
   switchTab(state.lastTab || 'installed');
   applyFeatureUI();
   updatePauseBtn();
   updatePlaylistStatus();
   L.on('lib:changed', async () => { await loadLibrary(); if (state.tab === 'installed') renderGrid(); checkPendingDownloads(); });
-  L.on('wp:changed', (st) => { state.wp = st; updatePauseBtn(); markActive(); });
+  L.on('wp:changed', (st) => { state.wp = st; fixTarget(); updatePauseBtn(); markActive(); });
+  $('#target').onchange = (e) => { state.slot = e.target.value; localStorage.setItem('astral.target', state.slot); };
   L.on('ui:navigate', (where) => { if (where === 'settings') openSettings(); else if (where === 'updates') openSettings('updates'); });
   L.on('update:available', (r) => toast(`Update ${r.latest} is available. Open Settings › Updates to install.`));
   L.on('win:state', (s) => { const b = $('#tb-max'); b.dataset.iconDone = ''; b.dataset.icon = s.maximized ? 'restore' : 'max'; hydrateIcons($('#titlebar')); });
   setupDragDrop();
+  setupSliderWheel();
   if (!state.settings.firstRunDone) firstRun();
 }
 
@@ -182,7 +185,7 @@ function bindChrome() {
   $('#btn-cancel').onclick = async () => {
     if (state.revert !== null) {
       const r = state.revert; state.revert = null;
-      if (r.itemId) await api('wp:apply', r.itemId, state.slot); else await api('wp:clear', state.slot);
+      for (const [t, itemId] of Object.entries(r)) { if (itemId) await api('wp:apply', itemId, t); else await api('wp:clear', t); }
       toast('Reverted to the previous wallpaper');
     }
   };
@@ -226,7 +229,8 @@ function debounce(f, ms) { let t; return (...a) => { clearTimeout(t); t = setTim
 function setView(v, label) { state.view = v; $('#installed-label').textContent = label; switchTab('installed'); }
 
 const featureOn = (n) => !state.settings || !state.settings.features || state.settings.features[n] !== false;
-const TAB_FEATURE = { discover: 'workshop', workshop: 'workshop', widgets: 'widgets', rainmeter: 'rainmeter' };
+// The Widgets tab stays visible when widgets are off: its own switch turns them back on.
+const TAB_FEATURE = { discover: 'workshop', workshop: 'workshop', rainmeter: 'rainmeter' };
 /** Hides the tabs / rows of optional features that are turned off. */
 function applyFeatureUI() {
   for (const [tab, f] of Object.entries(TAB_FEATURE)) { const t = $(`.tab[data-tab="${tab}"]`); if (t) t.hidden = !featureOn(f); }
@@ -245,6 +249,7 @@ function switchTab(tab) {
   $('#page-rainmeter').hidden = tab !== 'rainmeter';
   $('#footer').hidden = !['installed'].includes(tab);
   $('#toolbar').hidden = tab === 'discover';
+  $('#filters').dataset.for = tab; // the filter panel has nothing to filter on Discover
   const sort = $('#sort');
   if (tab === 'installed') {
     sort.innerHTML = [['name', 'Name'], ['recent', 'Date added'], ['updated', 'Last updated'], ['type', 'Type'], ['favorite', 'Favorites first']].map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
@@ -314,7 +319,9 @@ function renderGrid() {
       <div class="ti">${esc(it.title)}</div></div>`);
     if (it.preview) c.dataset.src = it.preview;
     else if (it.type === 'image' && it.entryUrl) c.dataset.src = it.entryUrl;
-    c.onclick = () => selectItem(it.id, true);
+    // Single click shows the details; double click (or the Apply button / Enter) sets the wallpaper.
+    c.onclick = () => selectItem(it.id, false);
+    c.ondblclick = () => selectItem(it.id, true);
     c.oncontextmenu = (e) => { e.preventDefault(); itemMenu(it, e.clientX, e.clientY); };
     frag.appendChild(c);
     if (c.dataset.src) io.observe(c);
@@ -366,13 +373,49 @@ async function selectItem(id, apply) {
   if (apply) await applyItem(id);
 }
 
+/**
+ * Which display a picked wallpaper goes to. Keeps the choice only while that display still exists
+ * (monitors get plugged in and out); otherwise falls back to the main display. With several monitors
+ * the footer shows an "Apply to" picker so the target is always visible.
+ */
+function fixTarget() {
+  const wp = state.wp || {};
+  const ds = wp.displays || [];
+  const per = wp.layout === 'per-monitor';
+  const main = (ds.find((d) => d.primary) || ds[0] || {}).id;
+  const valid = per ? [...ds.map((d) => d.id), 'all'] : [wp.layout];
+  if (!valid.includes(state.slot)) {
+    // With several monitors a picked wallpaper goes to all of them unless the user chose one display.
+    const saved = localStorage.getItem('astral.target');
+    state.slot = !per ? wp.layout : valid.includes(saved) ? saved : ds.length > 1 ? 'all' : main;
+  }
+  const wrap = $('#target-wrap'), sel = $('#target');
+  if (!wrap || !sel) return;
+  wrap.hidden = !(per && ds.length > 1);
+  if (wrap.hidden) return;
+  sel.innerHTML = ds.map((d, i) => `<option value="${esc(d.id)}">${d.primary ? 'Main display' : 'Display ' + (i + 1)}${d.phys ? ` (${d.phys.width}×${d.phys.height})` : ''}</option>`).join('') + '<option value="all">All displays</option>';
+  sel.value = state.slot;
+}
+
+/** A single display id ("All displays" counts as the main display for playlists). */
+function oneSlot() { return state.slot === 'all' ? ((state.wp.displays || []).find((d) => d.primary) || {}).id : state.slot; }
+
 async function applyItem(id) {
-  const cur = (state.wp.slots || []).find((s) => s.id === state.slot || state.wp.layout !== 'per-monitor');
-  if (state.revert === null) state.revert = { itemId: cur ? cur.itemId : null };
+  fixTarget();
+  const it0 = state.items.find((x) => x.id === id);
+  if (it0 && it0.type === 'scene' && await api('lib:is3D', id).catch(() => false)) { toast('3D wallpapers are not supported yet.', 'err'); return; }
+  if (it0 && it0.type === 'application') { toast('Application wallpapers are not supported for safety reasons.', 'err'); return; }
+  const targets = state.slot === 'all' ? state.wp.displays.map((d) => d.id) : [state.slot];
+  // Remember what each display showed before the first change, so Cancel can put it back.
+  if (state.revert === null) state.revert = {};
+  for (const t of targets) {
+    if (t in state.revert) continue;
+    const cur = (state.wp.slots || []).find((s) => s.id === t || state.wp.layout !== 'per-monitor');
+    state.revert[t] = cur ? cur.itemId : null;
+  }
   const it = state.items.find((x) => x.id === id);
-  if (it && it.type === 'application') { toast('Application wallpapers are not supported for safety reasons.', 'err'); return; }
   if (it && it.missingDependency) { toast('This preset needs its base wallpaper. Subscribe to it first.', 'err'); }
-  state.wp = await safe(() => api('wp:apply', id, state.slot)) || state.wp;
+  for (const t of targets) state.wp = await safe(() => api('wp:apply', id, t)) || state.wp;
   markActive();
   updatePlaylistStatus();
 }
@@ -414,6 +457,14 @@ async function showLocalDetails(id) {
   if (it.supportsAudio && !tags.includes('Audio responsive')) tags.unshift('Audio responsive');
   d.appendChild(el(`<div class="d-meta">${esc(TYPE_LABEL[it.type] || it.type)}${it.size ? ' &nbsp;' + fmtSize(it.size) : ''}</div>`));
   d.appendChild(el(`<div class="chips">${[...tags, it.contentrating].filter(Boolean).map((t) => `<span class="chip">${esc(t)}</span>`).join('')}</div>`));
+  const is3D = it.type === 'scene' && await api('lib:is3D', id).catch(() => false);
+  if (is3D) d.appendChild(el('<div class="banner">3D wallpapers are not supported yet.</div>'));
+  const isOn = (state.wp.slots || []).some((x) => x.itemId === id);
+  const applyRow = el('<div class="d-actions"></div>');
+  const applyBtn = button(is3D ? 'Not supported yet' : isOn ? 'Applied' : 'Apply wallpaper', 'btn-accent wide', () => applyItem(id).then(() => showLocalDetails(id)), 'check');
+  applyBtn.disabled = !!is3D;
+  applyRow.appendChild(applyBtn);
+  d.appendChild(applyRow);
   const acts = el('<div class="d-actions"></div>');
   acts.appendChild(button(it.favorite ? 'Favorited' : 'Favorite', 'btn-dark small', async () => { await api('lib:favorite', id); await loadLibrary(); renderGrid(); showLocalDetails(id); }, 'heart'));
   acts.appendChild(button('Folder', 'btn-dark small', () => api('lib:openFolder', id), 'folder'));
@@ -616,7 +667,6 @@ async function loadWorkshop() {
   $('#empty').hidden = false;
   $('#empty').innerHTML = 'Loading Steam Workshop…';
   $('#pager').hidden = true;
-  ws.loggedIn = await api('ws:loggedIn').catch(() => false);
   try {
     const r = await api('ws:browse', { page: ws.page, sort: ws.sort, search: state.search, types: [...ws.types], tags: [...ws.tags], ratings: [...ws.ratings] });
     if (req !== wsReq || state.tab !== 'workshop') return;
@@ -694,32 +744,24 @@ async function showWsDetails(id) {
   if (it.description) d.appendChild(el(`<div class="desc">${esc(it.description.replace(/\[\/?[a-z0-9=*]+\]/gi, ''))}</div>`));
 }
 
+// Subscribing happens in the real Steam app: Astral never asks for or touches the user's Steam
+// account. The library folder watcher picks the wallpaper up as soon as Steam downloads it.
+const inBrowser = () => (state.settings.workshop || {}).openIn === 'browser';
+const otherWay = (id) => (inBrowser()
+  ? { label: 'Open in Steam app instead', click: () => api('ws:openInSteam', id, 'steam') }
+  : { label: 'Blank page? Open in browser', click: () => api('ws:openInSteam', id, 'browser') });
+
 async function subscribe(id) {
-  const ws = state.ws;
-  if (!(await api('ws:loggedIn').catch(() => false))) {
-    const ok = await confirmBox('Sign in to Steam', 'To subscribe from inside Astral Engine, sign in to Steam Community once. You can also open the item in the Steam client and press Subscribe there.', 'Sign in');
-    if (!ok) { api('ws:openInSteam', id); return; }
-    const logged = await api('ws:login');
-    if (!logged) { toast('Not signed in. Opening the item in Steam instead.'); api('ws:openInSteam', id); return; }
-  }
-  const r = await safe(() => api('ws:subscribe', id));
-  if (r) {
-    ws.pending.set(id, Date.now());
-    toast('Subscribed. Steam is downloading the wallpaper; it will appear in Installed when ready.', 'ok');
-    if (state.selectedWs === id) showWsDetails(id);
-    if (state.tab === 'workshop') { const c = document.querySelector(`[data-ws="${id}"]`); if (c && !$('.dl', c)) c.appendChild(el('<div class="dl"></div>')); }
-  }
+  await api('ws:openInSteam', id);
+  state.ws.pending.set(id, Date.now());
+  toast(`Opened in ${inBrowser() ? 'your browser' : 'Steam'}. Press Subscribe there and the wallpaper appears in Installed as soon as Steam downloads it.`, 'ok', otherWay(id));
+  if (state.tab === 'workshop') { const c = document.querySelector(`[data-ws="${id}"]`); if (c && !$('.dl', c)) c.appendChild(el('<div class="dl"></div>')); }
 }
 
 async function unsubscribe(wid) {
   if (!wid) return;
-  if (!(await confirmBox('Unsubscribe', 'Unsubscribe from this wallpaper? Steam will remove its files.', 'Unsubscribe', true))) return;
-  if (!(await api('ws:loggedIn').catch(() => false))) {
-    const go = await confirmBox('Sign in to Steam', 'Sign in to Steam Community to unsubscribe from here, or use the Steam client.', 'Sign in');
-    if (!go || !(await api('ws:login'))) { api('ws:openInSteam', wid); return; }
-  }
-  const r = await safe(() => api('ws:unsubscribe', wid), 'Unsubscribed. Steam will remove the files shortly.');
-  if (r && state.tab === 'workshop') showWsDetails(wid);
+  await api('ws:openInSteam', wid);
+  toast(`Opened in ${inBrowser() ? 'your browser' : 'Steam'}. Press Unsubscribe there and Steam removes the files.`, 'ok', otherWay(wid));
 }
 
 function checkPendingDownloads() {
@@ -764,10 +806,18 @@ switchTab = function (t) { const e = $('#empty'); e.className = 'empty'; e.style
 // ---------------------------------------------------------------- widgets page
 async function renderWidgets() {
   const page = $('#page-widgets');
+  const on = featureOn('widgets');
+  const power = `<h2 class="row-flex" style="gap:12px">Desktop widgets <label class="switch" title="Turn all widgets on or off"><input type="checkbox" id="wd-power" ${on ? 'checked' : ''}><span></span></label><span class="status-pill ${on ? 'ok' : 'off'}">${on ? 'On' : 'Off'}</span></h2>`;
+  const wirePower = () => { $('#wd-power', page).onchange = async (e) => { state.settings = await api('settings:set', 'features.widgets', e.target.checked); applyFeatureUI(); toast(e.target.checked ? 'Widgets on' : 'Widgets off (fully unloaded, your layout is kept)', 'ok'); renderWidgets(); }; };
+  if (!on) {
+    page.innerHTML = power + '<div class="banner">Widgets are off and fully unloaded, so they use no memory or CPU. Your widgets and their positions are kept; turn the switch on to bring them all back.</div>';
+    wirePower();
+    return;
+  }
   const [types, list, displays] = [await api('widgets:types'), await api('widgets:list'), (state.wp && state.wp.displays) || []];
-  page.innerHTML = `<h2>Desktop widgets</h2><div class="banner">Widgets sit on your desktop above the wallpaper. Unlock a widget to drag or resize it; lock it to keep it in place. Lock with "click-through" so clicks pass to the desktop.</div>
+  page.innerHTML = `${power}<div class="banner">Widgets sit on your desktop above the wallpaper. Unlock a widget to drag or resize it; lock it to keep it in place. Lock with "click-through" so clicks pass to the desktop.</div>
     <div class="row-flex" style="margin-bottom:8px"><span class="muted">Add to display</span><select class="select" id="wd-display" style="min-width:200px">${displays.map((d, i) => `<option value="${esc(d.id)}">${i + 1}. ${esc(d.label)}${d.primary ? ' (primary)' : ''}</option>`).join('')}</select>
-    <div class="grow"></div><button class="btn btn-dark" id="wd-hide"><i data-icon="eye"></i>Show / hide all</button></div>
+    <div class="grow"></div><span class="muted">Border for all</span><select class="select" id="wd-border" title="Edge drawn around every widget"><option value="">Choose…</option><option value="dashed">Dashed while unlocked</option><option value="solid">Solid line</option><option value="none">No border</option></select><button class="btn btn-dark" id="wd-hide"><i data-icon="eye"></i>Show / hide all</button></div>
     <div class="tiles" id="wd-types"></div><h3>Your widgets</h3><div class="list" id="wd-list"></div>`;
   hydrateIcons(page);
   const tiles = $('#wd-types', page);
@@ -777,6 +827,8 @@ async function renderWidgets() {
     tiles.appendChild(tile);
   }
   let visible = true;
+  wirePower();
+  $('#wd-border', page).onchange = async (e) => { if (!e.target.value) return; await api('widgets:updateAll', { options: { border: e.target.value } }); toast('Border updated on all widgets', 'ok'); renderWidgets(); };
   $('#wd-hide', page).onclick = async () => { visible = !visible; await api('widgets:visible', visible); };
   const ul = $('#wd-list', page);
   if (!list.length) ul.appendChild(el('<div class="muted">No widgets yet. Pick one above.</div>'));
@@ -796,15 +848,18 @@ async function renderWidgets() {
 }
 function widgetIcon(t) { return ({ clock: 'info', analog: 'refresh', calendar: 'list', sysmon: 'bolt', weather: 'globe', notes: 'edit', visualizer: 'audio', battery: 'bolt', countdown: 'refresh', photo: 'layers', quote: 'info' })[t] || 'widgets'; }
 
+const optSel = (label, k, v, opts) => `<div class="frow"><span class="fl">${label}</span><select data-k="${k}">${opts.map(([val, l]) => `<option value="${val}" ${String(v) === String(val) ? 'selected' : ''}>${l}</option>`).join('')}</select></div>`;
+let fontCache = null;
+
 function widgetSettings(w) {
   const o = w.options || {};
   const extra = {
     clock: `<div class="frow"><span class="fl">24-hour clock</span><input type="checkbox" data-k="h24" ${o.h24 !== false ? 'checked' : ''}></div><div class="frow"><span class="fl">Show seconds</span><input type="checkbox" data-k="seconds" ${o.seconds ? 'checked' : ''}></div><div class="frow"><span class="fl">Show date</span><input type="checkbox" data-k="date" ${o.date !== false ? 'checked' : ''}></div>`,
-    analog: `<div class="frow"><span class="fl">Show seconds hand</span><input type="checkbox" data-k="seconds" ${o.seconds !== false ? 'checked' : ''}></div>`,
+    analog: `${optSel('Clock face', 'face', o.face || 'classic', [['classic', 'Classic'], ['minimal', 'Minimal'], ['dots', 'Dots'], ['numbers', 'Numbers'], ['roman', 'Roman numerals'], ['neon', 'Neon glow'], ['modern', 'Modern dial'], ['skeleton', 'Skeleton rings']])}<div class="frow"><span class="fl">Show seconds hand</span><input type="checkbox" data-k="seconds" ${o.seconds !== false ? 'checked' : ''}></div><div class="frow"><span class="fl">Smooth sweeping seconds</span><input type="checkbox" data-k="smooth" ${o.smooth ? 'checked' : ''}></div>`,
     weather: `<div class="frow"><span class="fl">City</span><input type="text" data-k="city" value="${esc(o.city || '')}" placeholder="e.g. Dhaka"></div><div class="frow"><span class="fl">Units</span><select data-k="units"><option value="c" ${o.units !== 'f' ? 'selected' : ''}>Celsius</option><option value="f" ${o.units === 'f' ? 'selected' : ''}>Fahrenheit</option></select></div>`,
     countdown: `<div class="frow"><span class="fl">Title</span><input type="text" data-k="title" value="${esc(o.title || 'New Year')}"></div><div class="frow"><span class="fl">Date & time</span><input type="text" data-k="target" value="${esc(o.target || '')}" placeholder="2027-01-01 00:00"></div>`,
     notes: `<div class="frow"><span class="fl">Note color</span><input type="color" data-k="noteColor" value="${esc(o.noteColor || '#f7e26b')}"></div>`,
-    visualizer: `<div class="frow"><span class="fl">Bars</span><input type="number" data-k="bars" min="8" max="64" value="${o.bars || 48}"></div>`,
+    visualizer: `${optSel('Visualizer type', 'vizStyle', o.vizStyle || 'bars', [['bars', 'Bars'], ['mirror', 'Mirrored bars'], ['wave', 'Wave'], ['fill', 'Filled wave'], ['circle', 'Circle'], ['ring', 'Ring wave'], ['dots', 'Dots'], ['blocks', 'LED blocks'], ['line', 'Thin lines']])}${optSel('Colours', 'colorMode', o.colorMode || 'accent', [['accent', 'Accent colour'], ['gradient', 'Gradient'], ['rainbow', 'Rainbow']])}<div class="frow"><span class="fl">Second colour (gradient)</span><input type="color" data-k="accent2" value="${esc(o.accent2 || '#ff5fa8')}"></div><div class="frow"><span class="fl">Bars / points</span><input type="range" data-k="bars" min="8" max="128" step="1" value="${o.bars || 48}"></div><div class="frow"><span class="fl">Sensitivity</span><input type="range" data-k="sens" min="0.3" max="3" step="0.05" value="${o.sens ?? 1}"></div><div class="frow"><span class="fl">Smoothing</span><input type="range" data-k="smoothing" min="0" max="0.9" step="0.05" value="${o.smoothing ?? 0.65}"></div><div class="frow"><span class="fl">Line thickness</span><input type="range" data-k="thickness" min="1" max="8" step="0.5" value="${o.thickness ?? 2}"></div><div class="frow"><span class="fl">Glow</span><input type="checkbox" data-k="glow" ${o.glow ? 'checked' : ''}></div>`,
     quote: `<div class="frow"><span class="fl">Custom quotes (one per line)</span><input type="text" data-k="quotes" value="${esc(o.quotes || '')}" placeholder="Leave empty for built-in quotes"></div>`
   }[w.type] || '';
   const body = el(`<div class="form">
@@ -812,10 +867,20 @@ function widgetSettings(w) {
     <div class="frow"><span class="fl">Accent color</span><input type="color" data-k="accent" value="${esc(o.accent || '#3d8bfd')}"></div>
     <div class="frow"><span class="fl">Opacity</span><input type="range" min="0.2" max="1" step="0.05" data-k="opacity" value="${o.opacity ?? 0.85}"></div>
     <div class="frow"><span class="fl">Size</span><input type="range" min="0.6" max="2" step="0.05" data-k="scale" value="${o.scale ?? 1}"></div>
+    ${optSel('Border', 'border', o.border || 'dashed', [['dashed', 'Dashed while unlocked'], ['solid', 'Solid line'], ['none', 'No border']])}
+    <div class="frow"><span class="fl">Show × (remove) button</span><input type="checkbox" data-k="closeBtn" ${o.closeBtn !== false ? 'checked' : ''}></div>
+    <div class="frow"><span class="fl">Font</span><select data-k="font" id="wfont"><option value="">Default (Segoe UI)</option></select></div>
     ${extra}
     ${w.type === 'photo' ? '<div class="frow"><span class="fl">Picture</span><button class="btn btn-dark" id="pick">Choose image…</button></div>' : ''}
   </div>`);
   const m = modal({ title: 'Widget settings', body, cls: 'small', foot: [button('Done', 'btn-accent', () => m.close())] });
+  // Font list: Astral's bundled fonts first, then everything installed in Windows. Each option previews itself.
+  const fsel = $('#wfont', body);
+  (async () => {
+    if (!fontCache) fontCache = await api('widgets:fonts').catch(() => ({ bundled: [], installed: [] }));
+    const opt = (f) => `<option value="${esc(f)}" style="font-family:'${esc(f)}'" ${o.font === f ? 'selected' : ''}>${esc(f)}</option>`;
+    fsel.insertAdjacentHTML('beforeend', `<optgroup label="Astral fonts">${fontCache.bundled.map(opt).join('')}</optgroup><optgroup label="Installed on this PC (${fontCache.installed.length})">${fontCache.installed.filter((f) => !fontCache.bundled.includes(f)).map(opt).join('')}</optgroup>`);
+  })();
   body.querySelectorAll('[data-k]').forEach((inp) => {
     const ev = inp.type === 'range' || inp.type === 'color' || inp.type === 'text' ? 'input' : 'change';
     inp.addEventListener(ev, debounce(() => {
@@ -829,38 +894,80 @@ function widgetSettings(w) {
 }
 
 // ---------------------------------------------------------------- rainmeter page
+/** "Find skins": search DeviantArt's Rainmeter skins, or open VisualSkins. */
+function findSkins() {
+  const body = el(`<div class="form">
+    <div class="fd" style="margin-bottom:10px">Search for Rainmeter skins on DeviantArt, or browse the VisualSkins gallery. Download a <b>.rmskin</b> file, then drop it on the Rainmeter page to install it.</div>
+    <div class="search" style="width:100%;margin-bottom:12px"><input id="fs-q" type="text" placeholder="e.g. clock, music player, minimal" spellcheck="false"><i data-icon="search"></i></div>
+    <div class="row-flex"><button class="btn btn-accent" id="fs-da"><i data-icon="search"></i>Search DeviantArt</button><button class="btn btn-dark" id="fs-vs"><i data-icon="external"></i>Open VisualSkins</button></div></div>`);
+  hydrateIcons(body);
+  const m = modal({ title: 'Find Rainmeter skins', body, cls: 'small', foot: [button('Close', 'btn-dark', () => m.close())] });
+  const da = () => { const q = $('#fs-q', body).value.trim(); api('shell:open', 'https://www.deviantart.com/search?q=' + encodeURIComponent(('rainmeter ' + q).trim())); m.close(); };
+  $('#fs-da', body).onclick = da;
+  $('#fs-q', body).onkeydown = (e) => { if (e.key === 'Enter') da(); };
+  $('#fs-vs', body).onclick = () => { api('shell:open', 'https://visualskins.com/'); m.close(); };
+  setTimeout(() => $('#fs-q', body).focus(), 50);
+}
+
 async function renderRainmeter() {
   const page = $('#page-rainmeter');
   page.innerHTML = '<div class="muted">Checking Rainmeter…</div>';
   const st = await api('rm:status');
   if (!st.installed) {
     page.innerHTML = `<h2>Rainmeter</h2><div class="banner">Rainmeter is not installed. Astral Engine works together with Rainmeter so you can load, unload and switch skins and layouts from here, install <span class="kbd">.rmskin</span> packages, and keep your skins on top of live wallpapers.</div>
-      <div class="row-flex"><button class="btn btn-accent" id="rm-dl"><i data-icon="external"></i>Download Rainmeter</button><button class="btn btn-dark" id="rm-pick"><i data-icon="folder"></i>I installed it somewhere else…</button><button class="btn btn-dark" id="rm-re"><i data-icon="refresh"></i>Check again</button></div>`;
+      <div class="row-flex"><button class="btn btn-accent" id="rm-one"><i data-icon="plus"></i>Install Rainmeter</button><span class="muted" id="rm-prog"></span></div>
+      <div class="fd" style="margin:8px 0 14px">One click: Astral downloads the latest official Rainmeter from github.com/rainmeter, checks its checksum and digital signature, and installs it for you. You can uninstall it from here at any time.</div>
+      <div class="row-flex"><button class="btn btn-dark" id="rm-dl"><i data-icon="external"></i>Download from website</button><button class="btn btn-dark" id="rm-pick"><i data-icon="folder"></i>I installed it somewhere else…</button><button class="btn btn-dark" id="rm-re"><i data-icon="refresh"></i>Check again</button></div>`;
     hydrateIcons(page);
+    $('#rm-one').onclick = async (e) => {
+      const b = e.currentTarget, prog = $('#rm-prog');
+      b.disabled = true;
+      const off = L.on('rm:installProgress', (p) => { prog.textContent = p.stage === 'download' ? `Downloading… ${Math.round((p.p || 0) * 100)}%` : p.stage === 'verify' ? 'Checking the download…' : p.stage === 'install' ? 'Installing…' : 'Starting Rainmeter…'; });
+      const r = await safe(() => api('rm:installApp'));
+      off();
+      if (r) { toast(`Rainmeter ${r.version} installed`, 'ok'); renderRainmeter(); } else { b.disabled = false; prog.textContent = ''; }
+    };
     $('#rm-dl').onclick = () => api('shell:open', st.downloadUrl);
     $('#rm-pick').onclick = async () => { await api('rm:pickExe'); renderRainmeter(); };
     $('#rm-re').onclick = () => renderRainmeter();
     return;
   }
   const [skins, layouts] = [await api('rm:skins'), await api('rm:layouts')];
-  page.innerHTML = `<h2>Rainmeter <span class="status-pill ${st.running ? 'ok' : 'off'}">${st.running ? 'Running' : 'Not running'}</span></h2>
+  page.innerHTML = `<h2 class="row-flex" style="gap:12px">Rainmeter <label class="switch" title="Start or close Rainmeter"><input type="checkbox" id="rm-power" ${st.running ? 'checked' : ''}><span></span></label><span class="status-pill ${st.running ? 'ok' : 'off'}" id="rm-state">${st.running ? 'On' : 'Off'}</span></h2>
     <div class="row-flex" style="margin-bottom:10px">
-      <button class="btn btn-accent" id="rm-refresh"><i data-icon="refresh"></i>${st.running ? 'Refresh all' : 'Start Rainmeter'}</button>
+      <button class="btn btn-accent" id="rm-refresh" ${st.running ? '' : 'hidden'}><i data-icon="refresh"></i>Refresh all</button>
       <button class="btn btn-dark" id="rm-manage"><i data-icon="gear"></i>Manage</button>
       <button class="btn btn-dark" id="rm-install"><i data-icon="plus"></i>Install .rmskin</button>
       <button class="btn btn-dark" id="rm-folder"><i data-icon="folder"></i>Skins folder</button>
       <button class="btn btn-dark" id="rm-get"><i data-icon="globe"></i>Find skins</button>
+      <button class="btn btn-dark" id="rm-uninst" title="Remove Rainmeter from this PC"><i data-icon="trash"></i>Uninstall</button>
       <div class="grow"></div>
       ${layouts.length ? `<select class="select" id="rm-layout"><option value="">Load layout…</option>${layouts.map((l) => `<option>${esc(l)}</option>`).join('')}</select>` : ''}
     </div>
     <div class="search" style="width:100%;margin-bottom:10px"><input id="rm-search" type="text" placeholder="Search skins" spellcheck="false"><i data-icon="search"></i></div>
+    <div class="dropzone" id="rm-drop"><i data-icon="plus"></i>Drop <b>.rmskin</b> files here to install them</div>
     <div class="list" id="rm-list"></div>`;
   hydrateIcons(page);
+  $('#rm-power').onchange = async (e) => {
+    const on = e.target.checked;
+    e.target.disabled = true; $('#rm-state').textContent = on ? 'Starting…' : 'Closing…';
+    await safe(() => api(on ? 'rm:start' : 'rm:quit'), on ? 'Rainmeter started' : 'Rainmeter closed');
+    setTimeout(renderRainmeter, 600);
+  };
   $('#rm-refresh').onclick = async () => { await safe(() => api('rm:refresh')); setTimeout(renderRainmeter, 1200); };
   $('#rm-manage').onclick = () => safe(() => api('rm:manage'));
   $('#rm-install').onclick = () => safe(() => api('rm:install'));
   $('#rm-folder').onclick = () => api('rm:openSkins');
-  $('#rm-get').onclick = () => api('shell:open', 'https://www.deviantart.com/rainmeter');
+  $('#rm-get').onclick = findSkins;
+  $('#rm-uninst').onclick = async () => {
+    const msg = st.managed
+      ? 'Rainmeter will be closed and removed from this PC, including any skins installed into it. Your Astral settings are not affected.'
+      : "This Rainmeter wasn't installed by Astral, so its own uninstaller will open.";
+    if (!(await confirmBox('Uninstall Rainmeter?', msg, 'Uninstall', true))) return;
+    const r = await safe(() => api('rm:uninstallApp'));
+    if (r && r.removed) toast('Rainmeter uninstalled', 'ok');
+    setTimeout(renderRainmeter, r && r.launchedUninstaller ? 4000 : 300);
+  };
   const lay = $('#rm-layout');
   if (lay) lay.onchange = async () => { if (lay.value) { await safe(() => api('rm:loadLayout', lay.value), 'Layout loaded'); setTimeout(renderRainmeter, 1500); } };
   const draw = () => {
@@ -899,10 +1006,11 @@ async function openDisplays() {
     <div class="row-flex" style="margin-top:12px" id="mon-actions"></div></div>`);
   const m = modal({ title: 'Displays', body, foot: [button('Close', 'btn-accent', () => m.close())] });
   $('#layout', body).value = st.layout;
-  $('#layout', body).onchange = async (e) => { await api('settings:set', 'wallpaper.layout', e.target.value); state.settings = await api('settings:get'); state.wp = await api('wp:status'); state.slot = e.target.value === 'per-monitor' ? state.wp.displays[0].id : e.target.value; draw(); };
+  $('#layout', body).onchange = async (e) => { await api('settings:set', 'wallpaper.layout', e.target.value); state.settings = await api('settings:get'); state.wp = await api('wp:status'); state.slot = null; fixTarget(); draw(); };
   const draw = () => {
     const mons = $('#mons', body); mons.innerHTML = '';
-    const ds = state.wp.displays;
+    // Physical pixels, like Windows Settings: with mixed scaling, logical sizes make monitors look smaller than they are.
+    const ds = state.wp.displays.map((d) => ({ ...d, bounds: d.phys || d.bounds }));
     const minX = Math.min(...ds.map((d) => d.bounds.x)), minY = Math.min(...ds.map((d) => d.bounds.y));
     const maxX = Math.max(...ds.map((d) => d.bounds.x + d.bounds.width)), maxY = Math.max(...ds.map((d) => d.bounds.y + d.bounds.height));
     const sc = Math.min((mons.clientWidth || 800) / (maxX - minX), 200 / (maxY - minY)) * 0.9;
@@ -914,20 +1022,20 @@ async function openDisplays() {
       const mon = el(`<div class="mon${state.slot === key ? ' sel' : ''}">${i + 1}<small>${esc(slot ? slot.title : 'No wallpaper')}</small></div>`);
       Object.assign(mon.style, { left: ox + (d.bounds.x - minX) * sc + 'px', top: oy + (d.bounds.y - minY) * sc + 'px', width: d.bounds.width * sc - 4 + 'px', height: d.bounds.height * sc - 4 + 'px' });
       if (item && item.preview) mon.style.backgroundImage = `url("${item.preview}")`;
-      mon.onclick = () => { state.slot = key; draw(); };
+      mon.onclick = () => { state.slot = key; fixTarget(); draw(); };
       mons.appendChild(mon);
     });
     const acts = $('#mon-actions', body); acts.innerHTML = '';
-    acts.appendChild(el(`<span class="muted">Selected: ${state.wp.layout === 'per-monitor' ? 'display ' + (ds.findIndex((d) => d.id === state.slot) + 1) : 'all displays'}. Wallpapers you pick are applied here.</span>`));
+    acts.appendChild(el(`<span class="muted">Selected: ${state.wp.layout === 'per-monitor' && state.slot !== 'all' ? 'display ' + (ds.findIndex((d) => d.id === state.slot) + 1) : 'all displays'}. Wallpapers you pick are applied here.</span>`));
     acts.appendChild(el('<div class="grow"></div>'));
-    acts.appendChild(button('Remove wallpaper', 'btn-danger small', async () => { state.wp = await api('wp:clear', state.slot === 'clone' || state.slot === 'span' ? state.slot : state.slot); state.wp = await api('wp:status'); draw(); markActive(); }, 'trash'));
+    acts.appendChild(button('Remove wallpaper', 'btn-danger small', async () => { state.wp = await api('wp:clear', state.slot === 'all' ? undefined : state.slot); state.wp = await api('wp:status'); draw(); markActive(); }, 'trash'));
   };
   requestAnimationFrame(draw);
 }
 
 // ---------------------------------------------------------------- playlists
 function currentPlaylistItems() {
-  const slot = (state.wp.slots || []).find((s) => s.id === state.slot) || (state.wp.slots || [])[0];
+  const slot = (state.wp.slots || []).find((s) => s.id === oneSlot()) || (state.wp.slots || [])[0];
   return slot ? [slot.itemId] : [];
 }
 async function addToPlaylist(itemId) {
@@ -957,8 +1065,8 @@ function loadPlaylistMenu() {
   const r = $('#pl-load').getBoundingClientRect();
   if (!lists.length) { toast('No saved playlists yet.'); return; }
   menu(r.left, r.top - 8 - Math.min(lists.length + 2, 10) * 32, [
-    ...lists.map((p) => ({ label: `${p.name} (${p.items.length})`, icon: 'play', click: async () => { await safe(() => api('playlist:start', p.id, state.slot), `Playing "${p.name}"`); updatePlaylistStatus(); } })),
-    '-', { label: 'Stop playlist', icon: 'x', click: async () => { await api('playlist:stop', state.slot); updatePlaylistStatus(); } }
+    ...lists.map((p) => ({ label: `${p.name} (${p.items.length})`, icon: 'play', click: async () => { await safe(() => api('playlist:start', p.id, oneSlot()), `Playing "${p.name}"`); updatePlaylistStatus(); } })),
+    '-', { label: 'Stop playlist', icon: 'x', click: async () => { await api('playlist:stop', oneSlot()); updatePlaylistStatus(); } }
   ]);
 }
 async function configurePlaylist() {
@@ -1022,7 +1130,7 @@ async function openSettings(startPage = 'performance') {
         ${row('Locked / asleep', sel('playback.displayAsleepOrLocked', pb.displayAsleepOrLocked, [['pause', 'Pause'], ['stop', 'Stop (free memory)']]))}
         ${row('Only affect the covered monitor', chk('playback.pauseAllPerMonitor', pb.pauseAllPerMonitor), 'With several monitors, keep the others playing')}
         <h3>Quality</h3>
-        ${row('FPS limit', `<div class="rng" style="display:flex;gap:8px;align-items:center"><input type="range" min="10" max="144" step="1" data-k="playback.fps" value="${pb.fps}"><span id="fpsv">${pb.fps}</span></div>`, 'Lower = less GPU and CPU use')}
+        ${row('FPS limit', `<div class="rng" style="display:flex;gap:8px;align-items:center"><input type="range" min="10" max="240" step="1" data-k="playback.fps" value="${Math.min(240, pb.fps)}"><input type="number" class="num" min="1" max="360" step="1" data-k="playback.fps" value="${pb.fps}" title="Type any frame rate"><span class="muted unit">fps</span></div>`, 'Drag or type a number. Lower = less GPU and CPU use; match your monitor (60, 120, 144…) for the smoothest motion')}
         ${row('Render quality', sel('playback.quality', pb.quality, [['low', 'Low (50%)'], ['medium', 'Medium (75%)'], ['high', 'High (native)'], ['ultra', 'Ultra (supersampled)']]), 'Resolution of scene wallpapers')}
         </div>`;
     } else if (p === 'features') {
@@ -1064,7 +1172,6 @@ async function openSettings(startPage = 'performance') {
         <div class="banner" style="margin-top:10px">On recent Windows 11 builds Explorer may ignore taskbar styling for some modes; "Transparent" and "Solid color" work most reliably. Choose "Windows default" to restore the normal taskbar.</div></div>`;
     } else if (p === 'steam') {
       const st = state.info.steam || {};
-      const logged = await api('ws:loggedIn').catch(() => false);
       html = `<div class="form"><h3>Steam</h3>
         ${row('Steam client', `<span class="status-pill ${st.steamPath ? 'ok' : 'off'}">${st.steamPath ? 'Found' : 'Not found'}</span>`, esc(st.steamPath || 'Install Steam to use Workshop wallpapers'))}
         ${row('Signed-in Steam account', esc(st.user ? st.user.personaName || st.user.accountName : 'Unknown'))}
@@ -1072,11 +1179,11 @@ async function openSettings(startPage = 'performance') {
         ${row('Workshop folders', esc((st.workshopDirs || []).join('<br>') || 'none'))}
         ${row('Scene support files', `<span class="status-pill ${st.weAssetsDir ? 'ok' : 'off'}">${st.weAssetsDir ? 'Found' : 'Missing'}</span>`, 'Built-in effects and shaders used by scene wallpapers (read-only from your Wallpaper Engine install)')}
         ${row('Rescan', `<button class="btn btn-dark" id="steam-rescan">Rescan Steam</button>`)}
-        <h3>Steam Community (subscribe from inside the app)</h3>
-        ${row('Status', logged ? '<span class="status-pill ok">Signed in</span>' : '<span class="status-pill off">Not signed in</span>')}
-        ${row('', logged ? '<button class="btn btn-dark" id="ws-logout">Sign out</button>' : '<button class="btn btn-accent" id="ws-login">Sign in to Steam</button>')}
-        <h3>Workshop browsing</h3>
-        ${row('Steam Web API key (optional)', `<input type="password" data-k="workshop.apiKey" value="${esc(s.workshop.apiKey || '')}" placeholder="Not required">`, 'Gives exact result counts and faster searches. Get one at steamcommunity.com/dev/apikey')}
+        ${row('Open Workshop pages in', sel('workshop.openIn', s.workshop.openIn || 'steam', [['steam', 'Steam app'], ['browser', 'Web browser']]), 'Where Subscribe / Unsubscribe take you. If the Steam app shows a blank page, choose Web browser (sign in to steamcommunity.com there once).')}
+        <div class="banner" style="margin-top:12px">Browsing the Workshop needs no account or key. Subscribe and Unsubscribe open the wallpaper's page in your Steam app or browser, so Astral never sees your Steam login.</div>
+        <details class="adv"><summary>Advanced</summary>
+        ${row('Personal Steam Web API key', `<input type="password" data-k="workshop.apiKey" value="${esc(s.workshop.apiKey || '')}" placeholder="Not needed">`, 'Only for developers who already have one. Searches work the same without it.')}
+        </details>
         </div>`;
     } else if (p === 'rainmeter') {
       const rm = await api('rm:status');
@@ -1084,11 +1191,12 @@ async function openSettings(startPage = 'performance') {
         ${row('Rainmeter', `<span class="status-pill ${rm.installed ? 'ok' : 'off'}">${rm.installed ? 'Installed' : 'Not installed'}</span>`, esc(rm.exe || ''))}
         ${row('Skins folder', esc(rm.skinsDir))}
         ${row('Rainmeter.exe location', `<button class="btn btn-dark" id="rm-pick2">Choose…</button>`)}
+        ${row('Close Rainmeter when Astral Engine closes', chk('rainmeter.closeWithApp', !!(s.rainmeter && s.rainmeter.closeWithApp)), 'When you quit Astral completely (tray › Quit or shutting down), Rainmeter closes too. Closing just this window keeps both running.')}
         ${rm.installed ? '' : row('', `<button class="btn btn-accent" id="rm-dl2">Download Rainmeter</button>`)}</div>`;
     } else if (p === 'updates') {
       html = `<div class="form"><h3>Updates</h3>
         ${row('Current version', esc(state.info.version))}
-        ${row('GitHub repository', `<input type="text" data-k="updates.repo" value="${esc(s.updates.repo || state.info.defaultRepo || '')}" placeholder="owner/repo or GitHub URL" spellcheck="false">`, 'Releases from this repository are used for updates')}
+        ${row('Update source', `<a href="#" id="repo-link">github.com/${esc(state.info.defaultRepo)}</a>`, 'Official Astral Engine releases')}
         ${row('Check automatically', chk('updates.autoCheck', s.updates.autoCheck))}
         <div style="margin-top:14px" class="row-flex"><button class="btn btn-accent" id="chk-upd"><i data-icon="update"></i>Check for updates</button><span id="upd-res" class="muted"></span></div>
         <div id="upd-box" style="margin-top:12px"></div></div>`;
@@ -1098,16 +1206,21 @@ async function openSettings(startPage = 'performance') {
         <p class="muted" style="line-height:1.5">Live wallpapers for Windows: Steam Workshop scenes, videos, web wallpapers, desktop widgets and Rainmeter skins.<br>Wallpaper Engine is a product of its respective owners; this app is independent and only reads your existing Workshop downloads.</p>
         <div class="support"><div style="font-size:34px">☕</div><div style="flex:1"><div style="font-weight:600;font-size:16px">Enjoying the app?</div><div class="muted">Support development with a coffee.</div></div><button class="btn coffee-btn" id="coffee">Buy Me a Coffee</button></div>
         <h3>Updates</h3><div class="row-flex"><button class="btn btn-accent" id="chk-upd"><i data-icon="update"></i>Check for updates</button><span id="upd-res" class="muted"></span></div><div id="upd-box" style="margin-top:12px"></div>
+        <h3>Licences</h3><div class="row-flex"><span class="muted" style="flex:1">Astral Engine is MIT-licensed open source. It includes Electron, Chromium, koffi and 15 Open Font License fonts.</span><button class="btn btn-dark" id="notices">Open-source licences</button></div>
         <h3>Resource usage</h3><div id="metrics" class="muted">Measuring…</div></div>`;
     }
     sp.innerHTML = html;
     hydrateIcons(sp);
     sp.querySelectorAll('[data-k]').forEach((inp) => {
       const k = inp.dataset.k;
-      const isLive = inp.type === 'range' || inp.type === 'color' || inp.type === 'text' || inp.type === 'password';
+      const isLive = inp.type === 'range' || inp.type === 'color' || inp.type === 'text' || inp.type === 'password' || inp.type === 'number';
       inp.addEventListener(isLive ? 'input' : 'change', debounce(async () => {
-        let v = inp.type === 'checkbox' ? inp.checked : inp.type === 'range' ? Number(inp.value) : inp.value;
-        if (k === 'playback.fps') $('#fpsv', sp).textContent = v;
+        let v = inp.type === 'checkbox' ? inp.checked : inp.type === 'range' || inp.type === 'number' ? Number(inp.value) : inp.value;
+        if (k === 'playback.fps') {
+          if (!Number.isFinite(v) || v < 1) return;
+          v = Math.round(Math.min(360, v));
+          sp.querySelectorAll('[data-k="playback.fps"]').forEach((o) => { if (o !== inp) o.value = Math.min(o.type === 'range' ? 240 : 360, v); });
+        }
         if (k === 'audio.volume') $('#volv', sp).textContent = v;
         if (k === 'taskbar.colorHex' || k === 'taskbar.alpha') {
           const hex = (sp.querySelector('[data-k="taskbar.colorHex"]') || {}).value || '#000000';
@@ -1128,11 +1241,11 @@ async function openSettings(startPage = 'performance') {
     const on = (id, f) => { const b = $('#' + id, sp); if (b) b.onclick = f; };
     on('clr-extra', async () => { await set('library.extraFolders', []); toast('Cleared. Restart the app to rescan.'); render('general'); });
     on('steam-rescan', async () => { state.info.steam = await api('steam:refresh'); await loadLibrary(); renderGrid(); render('steam'); toast('Steam rescanned', 'ok'); });
-    on('ws-login', async () => { await api('ws:login'); render('steam'); });
-    on('ws-logout', async () => { await api('ws:logout'); render('steam'); });
     on('rm-pick2', async () => { await api('rm:pickExe'); render('rainmeter'); });
     on('rm-dl2', () => api('shell:open', 'https://www.rainmeter.net/'));
     on('coffee', () => api('shell:support'));
+    on('notices', () => api('shell:notices'));
+    on('repo-link', (e) => { e.preventDefault(); api('shell:open', `https://github.com/${state.info.defaultRepo}/releases`); });
     on('chk-upd', () => checkUpdates(sp));
     if (p === 'about') {
       const ms = await api('app:metrics');
@@ -1184,12 +1297,38 @@ async function afterImport(items) {
   if (last) { await selectItem(last.id, true); toast(`Added "${last.title}"`, 'ok'); }
 }
 
+/** Mouse wheel over any slider moves it one step per notch (the page doesn't scroll meanwhile). */
+function setupSliderWheel() {
+  document.addEventListener('wheel', (e) => {
+    const r = e.target;
+    if (!(r instanceof HTMLInputElement) || r.type !== 'range' || r.disabled) return;
+    e.preventDefault();
+    const step = Number(r.step) > 0 ? Number(r.step) : 1;
+    const min = Number(r.min || 0), max = Number(r.max || 100);
+    const n = Math.max(1, Math.round(Math.abs(e.deltaY) / 100)) * (e.shiftKey ? 5 : 1);
+    const v = Math.min(max, Math.max(min, Number(r.value) + (e.deltaY < 0 ? 1 : -1) * step * n));
+    if (v === Number(r.value)) return;
+    r.value = String(v);
+    r.dispatchEvent(new Event('input', { bubbles: true }));
+    r.dispatchEvent(new Event('change', { bubbles: true }));
+  }, { passive: false });
+}
+
 function setupDragDrop() {
-  document.addEventListener('dragover', (e) => { e.preventDefault(); });
+  document.addEventListener('dragover', (e) => { e.preventDefault(); const z = $('#rm-drop'); if (z && state.tab === 'rainmeter') z.classList.add('over'); });
+  document.addEventListener('dragleave', (e) => { if (!e.relatedTarget) { const z = $('#rm-drop'); if (z) z.classList.remove('over'); } });
   document.addEventListener('drop', async (e) => {
     e.preventDefault();
     const paths = [...e.dataTransfer.files].map((f) => L.pathForFile(f)).filter(Boolean);
     if (!paths.length) return;
+    // .rmskin packages go to Rainmeter (from any page); everything else is a wallpaper import.
+    const skinsIn = paths.filter((p) => /.rmskin$/i.test(p));
+    if (skinsIn.length) {
+      $('#rm-drop') && $('#rm-drop').classList.remove('over');
+      for (const p of skinsIn) await safe(() => api('rm:installFile', p), 'Rainmeter is installing ' + p.split(/[\/]/).pop());
+      if (skinsIn.length === paths.length) return;
+    }
+    if (state.tab === 'rainmeter') { toast('Only .rmskin files can be installed here.', 'err'); return; }
     const items = await safe(() => api('lib:importPaths', paths));
     if (items && items.length) afterImport(items);
   });

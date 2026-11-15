@@ -101,14 +101,18 @@ async function start() {
   try {
     if (t === 'video') player = new VideoWallpaper(cfg);
     else if (t === 'image') player = new ImageWallpaper(cfg);
-    else if (t === 'scene') {
+    else if (t === 'scene' && cfg.item.is3D) {
+      // 3D model scenes aren't supported by the scene renderer yet: play the animated preview instead.
+      if (cfg.item.preview) player = new ImageWallpaper({ item: { entry: cfg.item.preview }, props: cfg.props });
+      else message('3D scenes are not supported yet.');
+    } else if (t === 'scene') {
       const canvas = document.createElement('canvas');
       stage.appendChild(canvas);
       player = new SceneWallpaper(canvas, cfg);
       await player.load();
       syncAudioCapture();
     }
-    if (t === 'scene' && player) player.setBuiltin = (b) => { player.volumeMul = Number(b.volume) / 100; player.rate = Number(b.rate) || 1; player.updateSoundVolumes && player.updateSoundVolumes(); };
+    if (t === 'scene' && player && !cfg.item.is3D) player.setBuiltin = (b) => { player.volumeMul = Number(b.volume) / 100; player.rate = Number(b.rate) || 1; player.updateSoundVolumes && player.updateSoundVolumes(); };
     if (t !== 'video' && t !== 'image' && t !== 'scene') {
       message('This wallpaper type (' + t + ') is not supported yet.');
     }

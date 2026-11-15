@@ -44,6 +44,7 @@ const FindWindowExW = user32.func('intptr_t __stdcall FindWindowExW(intptr_t par
 const SendMessageTimeoutW = user32.func('intptr_t __stdcall SendMessageTimeoutW(intptr_t hwnd, uint32 msg, uintptr_t w, intptr_t l, uint32 flags, uint32 timeout, _Out_ uintptr_t *result)');
 const SetParent = user32.func('intptr_t __stdcall SetParent(intptr_t child, intptr_t parent)');
 const GetParent = user32.func('intptr_t __stdcall GetParent(intptr_t hwnd)');
+const GetWindow = user32.func('intptr_t __stdcall GetWindow(intptr_t hwnd, uint32 cmd)');
 const SetWindowPos = user32.func('bool __stdcall SetWindowPos(intptr_t hwnd, intptr_t after, int x, int y, int cx, int cy, uint32 flags)');
 const GetWindowLongPtrW = user32.func('intptr_t __stdcall GetWindowLongPtrW(intptr_t hwnd, int idx)');
 const SetWindowLongPtrW = user32.func('intptr_t __stdcall SetWindowLongPtrW(intptr_t hwnd, int idx, intptr_t v)');
@@ -76,6 +77,7 @@ const WS_EX_NOACTIVATE = 0x08000000;
 const WS_EX_TRANSPARENT = 0x00000020;
 const SWP_NOSIZE = 0x1, SWP_NOMOVE = 0x2, SWP_NOZORDER = 0x4, SWP_NOACTIVATE = 0x10, SWP_SHOWWINDOW = 0x40, SWP_FRAMECHANGED = 0x20;
 const HWND_BOTTOM = 1;
+const GW_HWNDNEXT = 2, GW_CHILD = 5;
 const LWA_ALPHA = 0x2;
 const SMTO_NORMAL = 0;
 const DWMWA_CLOAKED = 14;
@@ -172,8 +174,9 @@ function embedWindow(hwnd, physRect) {
   } else {
     // Directly below the icons view...
     SetWindowPos(hwnd, layer.defView || HWND_BOTTOM, r.x, r.y, r.width, r.height, SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_FRAMECHANGED);
-    // ...and the static wallpaper WorkerW below us.
-    if (layer.workerw) SetWindowPos(layer.workerw, hwnd, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    // ...and the static wallpaper WorkerW at the very bottom. (Putting it directly below *this* window
+    // would hide every wallpaper embedded earlier, e.g. the one on the other monitor.)
+    if (layer.workerw) SetWindowPos(layer.workerw, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
   }
   return layer.mode;
 }
@@ -183,6 +186,29 @@ function moveEmbedded(hwnd, physRect) {
   if (!parent) return;
   const r = screenToParent(parent, physRect);
   SetWindowPos(hwnd, 0, r.x, r.y, r.width, r.height, SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+/**
+ * Windows 11 24H2+: our wallpapers and Explorer's static-wallpaper WorkerW are siblings inside Progman.
+ * Explorer sometimes raises that WorkerW (wallpaper refresh, theme change, slideshow), which hides our
+ * windows although they are still embedded. Returns true when every given window is above it; with
+ * fix=true the WorkerW is pushed back to the bottom.
+ */
+function keepAboveStaticWallpaper(hwnds, fix = true) {
+  const progman = FindWindowW('Progman', null);
+  if (!progman) return true;
+  const worker = FindWindowExW(progman, 0, 'WorkerW', null);
+  if (!worker) return true;
+  const mine = new Set(hwnds.filter((h) => GetParent(h) === progman));
+  if (!mine.size) return true;
+  // Walk Progman's children top to bottom; any of ours found after the WorkerW is hidden.
+  let ok = true, seenWorker = false;
+  for (let h = GetWindow(progman, GW_CHILD); h; h = GetWindow(h, GW_HWNDNEXT)) {
+    if (h === worker) seenWorker = true;
+    else if (seenWorker && mine.has(h)) { ok = false; break; }
+  }
+  if (!ok && fix) SetWindowPos(worker, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+  return ok;
 }
 
 function isEmbedded(hwnd) {
@@ -288,5 +314,5 @@ function setTaskbarStyle(mode, color = 0x00000000) {
 module.exports = {
   hwndFromBuffer, className, findDesktopLayer, embedWindow, moveEmbedded, isEmbedded,
   refreshSystemWallpaper, sendToBottom, setClickThrough, cursorPos, foregroundState,
-  setTaskbarStyle, taskbarWindows, ShowWindow, IsWindow, GetParent, trimWorkingSet
+  setTaskbarStyle, taskbarWindows, ShowWindow, IsWindow, GetParent, trimWorkingSet, rectOf, keepAboveStaticWallpaper
 };

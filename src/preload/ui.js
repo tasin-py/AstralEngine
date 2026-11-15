@@ -1,6 +1,6 @@
 'use strict';
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
-const EVENTS = new Set(['lib:changed', 'wp:changed', 'win:state', 'ui:navigate', 'update:available', 'update:progress']);
+const EVENTS = new Set(['lib:changed', 'wp:changed', 'win:state', 'ui:navigate', 'update:available', 'update:progress', 'rm:installProgress']);
 contextBridge.exposeInMainWorld('astral', {
   invoke: async (ch, ...args) => {
     const r = await ipcRenderer.invoke(ch, ...args);

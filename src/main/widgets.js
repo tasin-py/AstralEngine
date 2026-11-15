@@ -80,6 +80,10 @@ class Widgets {
     const hwnd = () => desktop.hwndFromBuffer(win.getNativeWindowHandle());
     win.setMenu(null);
     win.once('ready-to-show', () => {
+      // On a monitor with different scaling, Chromium creates the window a few pixels off; put it
+      // exactly where it was saved, otherwise the size would creep a little on every launch.
+      const c0 = this.list().find((w) => w.id === id);
+      if (c0) win.setBounds({ x: Math.round(c0.x), y: Math.round(c0.y), width: Math.round(c0.w), height: Math.round(c0.h) });
       if (this.visible) win.showInactive();
       desktop.sendToBottom(hwnd());
       const cfg = this.list().find((w) => w.id === id);
@@ -119,6 +123,47 @@ class Widgets {
     if (this.host.webContents.isLoading()) return cfg; // opened on load
     this.open(cfg);
     return cfg;
+  }
+
+  /** New widget next to an existing one (the sticky note's + button). */
+  addNear(id, type, options = {}) {
+    const src = this.config(id);
+    const cfg = this.add(type || (src && src.type) || 'notes', null);
+    if (src) {
+      const d = screen.getDisplayMatching({ x: Math.round(src.x), y: Math.round(src.y), width: Math.round(src.w), height: Math.round(src.h) }).workArea;
+      let x = src.x + src.w + 12, y = src.y;
+      if (x + cfg.w > d.x + d.width) { x = src.x - cfg.w - 12; if (x < d.x) { x = src.x + 24; y = src.y + 24; } }
+      return this.update(cfg.id, { x, y, w: src.w, h: src.h, options: { ...src.options, text: '', ...options } });
+    }
+    return this.update(cfg.id, { options });
+  }
+
+  /** Same option(s) for every widget, e.g. the border style from the Widgets page. */
+  updateAll(patch) {
+    for (const w of this.list()) this.update(w.id, patch);
+    return this.list();
+  }
+
+  /** Font families installed in Windows (all users + this user), from the registry. Cached. */
+  fonts() {
+    if (this._fonts) return this._fonts;
+    const { execFileSync } = require('child_process');
+    const names = new Set();
+    for (const key of ['HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion\\Fonts', 'HKCU\\Software\\Microsoft\\Windows NT\\CurrentVersion\\Fonts']) {
+      let out = '';
+      try { out = execFileSync('reg', ['query', key], { encoding: 'utf8', windowsHide: true, maxBuffer: 8 << 20 }); } catch { continue; }
+      for (const line of out.split(/\r?\n/)) {
+        const m = line.match(/^\s{4}(.+?)\s{4}REG_(?:EXPAND_)?SZ\s{4}/);
+        if (!m) continue;
+        // "Segoe UI Bold Italic (TrueType)" -> "Segoe UI"; "Cambria & Cambria Math (TrueType)" -> both
+        for (let n of m[1].replace(/\s*\([^)]*\)\s*$/, '').split(/\s+&\s+/)) {
+          n = n.replace(/(\s+(Bold|Italic|Oblique|Regular))+$/i, '').trim();
+          if (n && !n.startsWith('@')) names.add(n);
+        }
+      }
+    }
+    this._fonts = [...names].sort((a, b) => a.localeCompare(b));
+    return this._fonts;
   }
 
   remove(id) {

@@ -213,6 +213,7 @@ function quit() {
   try { audio && audio.close(); } catch { /* ignore */ }
   try { if (settings.get('taskbar.mode') !== 'normal') desktop.setTaskbarStyle('normal'); } catch { /* ignore */ }
   settings && settings.flush();
+  closeRainmeterWithApp();
   app.quit();
 }
 
@@ -286,8 +287,12 @@ function handle(ch, fn) {
 }
 
 function registerIPC() {
-  const steamSes = session.fromPartition('persist:steam');
-  workshop.useSession(steamSes);
+  // Older versions offered an in-app Steam Community sign-in. It's gone (subscribing now happens in
+  // the Steam app), so wipe any session cookies an older version stored.
+  if (!settings.get('steamSessionCleared')) {
+    session.fromPartition('persist:steam').clearStorageData().catch(() => {});
+    settings.set('steamSessionCleared', true);
+  }
 
   handle('app:info', () => ({
     name: config.APP_NAME, version: app.getVersion(), electron: process.versions.electron, steam: steamInfo,
@@ -322,6 +327,7 @@ function registerIPC() {
   });
 
   handle('wp:status', () => manager.status());
+  handle('lib:is3D', (e, id) => library.is3DScene(library.get(id)));
   handle('wp:apply', (e, itemId, slotId) => manager.apply(itemId, slotId).then(() => { playlists.stop(slotId); return manager.status(); }));
   handle('wp:clear', (e, slotId) => manager.clear(slotId));
   handle('wp:pause', (e, p) => { manager.setUserPaused(!!p); refreshTray(); return manager.status(); });
@@ -345,20 +351,13 @@ function registerIPC() {
 
   handle('ws:browse', (e, opts) => workshop.browse({ ...opts, apiKey: settings.get('workshop.apiKey') }));
   handle('ws:details', (e, ids) => workshop.getDetails(ids));
-  handle('ws:loggedIn', () => workshop.isLoggedIn());
-  handle('ws:subscribe', (e, id) => workshop.setSubscribed(id, true));
-  handle('ws:unsubscribe', (e, id) => workshop.setSubscribed(id, false));
-  handle('ws:openInSteam', (e, id) => shell.openExternal(`steam://url/CommunityFilePage/${encodeURIComponent(id)}`));
-  handle('ws:login', () => new Promise((resolve) => {
-    const w = new BrowserWindow({
-      width: 900, height: 760, parent: uiWin || undefined, modal: false, title: 'Sign in to Steam', autoHideMenuBar: true,
-      webPreferences: { partition: 'persist:steam', contextIsolation: true, sandbox: true }
-    });
-    w.loadURL('https://steamcommunity.com/login/home/?goto=sharedfiles');
-    const check = setInterval(async () => { if (await workshop.isLoggedIn()) { clearInterval(check); if (!w.isDestroyed()) w.close(); } }, 1500);
-    w.on('closed', async () => { clearInterval(check); resolve(await workshop.isLoggedIn()); });
-  }));
-  handle('ws:logout', async () => { await steamSes.clearStorageData(); return true; });
+  // Workshop pages open in the Steam app (default) or the web browser (Settings > Steam & Workshop).
+  // The Steam app's built-in browser sometimes shows a blank page; the browser is the fallback.
+  const wsPage = (id) => `https://steamcommunity.com/sharedfiles/filedetails/?id=${encodeURIComponent(String(id).replace(/\D/g, ''))}`;
+  handle('ws:openInSteam', (e, id, where) => {
+    const w = where || settings.get('workshop.openIn') || 'steam';
+    return shell.openExternal(w === 'browser' ? wsPage(id) : `steam://openurl/${wsPage(id)}`);
+  });
 
   handle('settings:get', () => settings.get());
   handle('settings:set', (e, key, value) => { settings.set(key, value); return settings.get(); });
@@ -368,14 +367,28 @@ function registerIPC() {
   handle('widgets:add', (e, type, displayId) => widgets.add(type, displayId));
   handle('widgets:remove', (e, id) => widgets.remove(id));
   handle('widgets:update', (e, id, patch) => widgets.update(id, patch));
+  handle('widgets:updateAll', (e, patch) => widgets.updateAll(patch));
+  handle('widgets:fonts', () => {
+    let bundled = [];
+    try { bundled = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'fonts', 'fonts.json'), 'utf8')); } catch { /* none */ }
+    return { bundled, installed: widgets.fonts() };
+  });
   handle('widgets:visible', (e, v) => { widgets.setVisible(!!v); refreshTray(); return v; });
   handle('widgets:pickPhoto', async () => {
     const r = await dialog.showOpenDialog(uiWin, { properties: ['openFile'], filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'] }] });
     return r.canceled ? null : r.filePaths[0];
   });
 
+  handle('shell:notices', () => {
+    const f = app.isPackaged ? path.join(process.resourcesPath, 'THIRD_PARTY_NOTICES.txt') : path.join(__dirname, '..', '..', 'THIRD_PARTY_NOTICES.txt');
+    return shell.openPath(f);
+  });
   handle('rm:status', () => rainmeter.status());
   handle('rm:quit', () => rainmeter.quit());
+  handle('rm:start', () => rainmeter.start());
+  handle('rm:installApp', () => rainmeter.installManaged((p) => sendUI('rm:installProgress', p)));
+  handle('rm:uninstallApp', () => rainmeter.uninstall());
+  handle('rm:installFile', (e, file) => rainmeter.installPackage(file));
   handle('rm:skins', () => rainmeter.listSkins());
   handle('rm:layouts', () => rainmeter.listLayouts());
   handle('rm:activate', (e, config, file) => rainmeter.activate(config, file));
@@ -397,7 +410,7 @@ function registerIPC() {
     return rainmeter.status();
   });
 
-  handle('update:check', () => updater.checkForUpdate({ repo: settings.get('updates.repo') || config.UPDATE_REPO, currentVersion: app.getVersion() }).then((r) => { settings.set('updates.lastCheck', Date.now()); return r; }));
+  handle('update:check', () => updater.checkForUpdate({ repo: config.UPDATE_REPO, currentVersion: app.getVersion() }).then((r) => { settings.set('updates.lastCheck', Date.now()); return r; }));
   handle('update:download', async (e, asset) => {
     const file = await updater.downloadInstaller(asset, path.join(app.getPath('temp'), 'astral-update'), (p) => sendUI('update:progress', p));
     return file;
@@ -432,6 +445,7 @@ function registerIPC() {
   ipcMain.handle('widget:config', (e, id) => widgets.config(id));
   ipcMain.handle('widget:update', (e, id, patch) => widgets.update(id, patch));
   ipcMain.handle('widget:remove', (e, id) => widgets.remove(id));
+  ipcMain.handle('widget:addNear', (e, id, type, options) => widgets.addNear(id, type, options));
   ipcMain.handle('widget:fileUrl', (e, p) => (p && isAllowed(p) ? 'astral://f/' + encodeURIComponent(p) : null));
 }
 
@@ -476,6 +490,7 @@ app.whenReady().then(async () => {
     if (key.startsWith('features')) applyFeatures();
   });
 
+  applyInstallerChoices();
   applyLoginItem();
   manager.start();
   await manager.sync();
@@ -506,10 +521,10 @@ app.whenReady().then(async () => {
   const hidden = startHidden && settings.get('startMinimized');
   createUI(!hidden);
 
-  if (settings.get('updates.autoCheck') && (settings.get('updates.repo') || config.UPDATE_REPO)) {
+  if (settings.get('updates.autoCheck') && (config.UPDATE_REPO)) {
     setTimeout(async () => {
       try {
-        const r = await updater.checkForUpdate({ repo: settings.get('updates.repo') || config.UPDATE_REPO, currentVersion: app.getVersion() });
+        const r = await updater.checkForUpdate({ repo: config.UPDATE_REPO, currentVersion: app.getVersion() });
         if (r.status === 'update-available' && r.latest !== settings.get('updates.skipVersion')) {
           sendUI('update:available', r);
           if (tray) tray.displayBalloon({ title: config.APP_NAME, content: `Version ${r.latest} is available.` });
@@ -518,6 +533,19 @@ app.whenReady().then(async () => {
     }, 15000);
   }
 });
+
+/** The installer's finish page leaves "Start with Windows" in the registry; apply it once, then remove it. */
+function applyInstallerChoices() {
+  if (!app.isPackaged || isSelfTest) return;
+  const { execFileSync } = require('child_process');
+  const key = 'HKCU\\Software\\Astral Engine';
+  try {
+    const out = execFileSync('reg', ['query', key, '/v', 'InstallStartWithWindows'], { encoding: 'utf8', windowsHide: true });
+    const m = out.match(/InstallStartWithWindows\s+REG_DWORD\s+0x([0-9a-f]+)/i);
+    if (m) settings.set('startWithWindows', parseInt(m[1], 16) === 1);
+    execFileSync('reg', ['delete', key, '/v', 'InstallStartWithWindows', '/f'], { windowsHide: true });
+  } catch { /* nothing left by the installer */ }
+}
 
 function applyLoginItem() {
   // Only a real installation starts with Windows: not the dev build, not test/benchmark runs,
@@ -535,5 +563,14 @@ app.on('will-quit', flushSettings);
 process.on('exit', flushSettings);
 app.whenReady().then(() => { require('electron').powerMonitor.on('shutdown', flushSettings); });
 app.on('window-all-closed', () => { /* stay in tray */ });
-app.on('before-quit', () => { quitting = true; if (manager) manager.shutdown(); if (settings) settings.flush(); });
+app.on('before-quit', () => { quitting = true; if (manager) manager.shutdown(); if (settings) settings.flush(); closeRainmeterWithApp(); });
+// Settings › Rainmeter › "Close Rainmeter when Astral Engine closes" (off by default). Only on a full quit
+// (tray Quit, Windows shutdown); closing the library window keeps Astral running in the tray.
+let rainmeterClosed = false;
+function closeRainmeterWithApp() {
+  if (rainmeterClosed || isSelfTest || !settings || !rainmeter) return;
+  rainmeterClosed = true;
+  if (settings.get('features.rainmeter') === false || !settings.get('rainmeter.closeWithApp')) return;
+  try { rainmeter.quitSync(); } catch { /* ignore */ }
+}
 process.on('uncaughtException', (e) => { console.error('uncaught', e); });

@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' astral: https: data: blob:; media-src astral: blob:; connect-src 'self' astral:; font-src 'self' data:">
+<link rel="stylesheet" href="../fonts/fonts.css">
 <title>Astral Engine</title>
 <link rel="stylesheet" href="styles.css">
 </head>
@@ -72,6 +73,7 @@
         <button class="btn btn-accent wide" id="btn-open-wallpaper"><i data-icon="upload"></i>Open Wallpaper</button>
         <button class="btn btn-dark wide" id="btn-open-folder"><i data-icon="folder"></i>Open Folder</button>
         <div class="grow"></div>
+        <label id="target-wrap" class="row-flex" hidden><span class="muted">Apply to</span><select class="select" id="target"></select></label>
         <span id="status-line" class="muted"></span>
       </div>
     </footer>

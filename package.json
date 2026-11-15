@@ -1,7 +1,7 @@
 {
   "name": "astral-engine",
   "productName": "Astral Engine",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Lightweight live wallpaper app for Windows: Steam Workshop scenes, videos and web wallpapers, desktop widgets and Rainmeter support.",
   "main": "src/main/main.js",
   "author": "tasinpy",
@@ -10,16 +10,33 @@
     "start": "electron .",
     "test": "node --test test/unit.test.mjs",
     "selftest": "electron . --selftest",
-    "dist": "electron-builder --win nsis portable --x64",
+    "dist": "node scripts/notices.js && electron-builder --win nsis portable --x64",
     "bench:we": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bench-processes.ps1 -App we -Label playing -Seconds 20",
     "bench:report": "node scripts/bench-report.js",
     "dist:art": "electron scripts/make-installer-art.js",
-    "bench:astral": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bench-processes.ps1 -App astral -Label playing -Seconds 20"
+    "bench:astral": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/bench-processes.ps1 -App astral -Label playing -Seconds 20",
+    "fonts": "node scripts/copy-fonts.js",
+    "notices": "node scripts/notices.js"
   },
   "dependencies": {
     "koffi": "2.16.4"
   },
   "devDependencies": {
+    "@fontsource/audiowide": "^5.3.0",
+    "@fontsource/bebas-neue": "^5.3.0",
+    "@fontsource/caveat": "^5.3.0",
+    "@fontsource/comfortaa": "^5.3.0",
+    "@fontsource/dancing-script": "^5.3.0",
+    "@fontsource/major-mono-display": "^5.3.0",
+    "@fontsource/monoton": "^5.3.0",
+    "@fontsource/orbitron": "^5.3.0",
+    "@fontsource/pacifico": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0",
+    "@fontsource/press-start-2p": "^5.3.0",
+    "@fontsource/quicksand": "^5.3.0",
+    "@fontsource/rajdhani": "^5.3.0",
+    "@fontsource/righteous": "^5.3.0",
+    "@fontsource/space-grotesk": "^5.3.0",
     "electron": "45.3.2",
     "electron-builder": "26.18.0"
   },
@@ -91,7 +108,17 @@
     "portable": {
       "artifactName": "AstralEngine-Portable-${version}.${ext}"
     },
-    "publish": null
+    "publish": null,
+    "extraResources": [
+      {
+        "from": "THIRD_PARTY_NOTICES.txt",
+        "to": "THIRD_PARTY_NOTICES.txt"
+      },
+      {
+        "from": "LICENSE",
+        "to": "LICENSE.txt"
+      }
+    ]
   },
   "homepage": "https://github.com/tasin-py/AstralEngine",
   "repository": {

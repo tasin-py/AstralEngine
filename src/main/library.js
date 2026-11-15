@@ -41,6 +41,27 @@ function dirSize(dir, limit = 20000) {
   return total;
 }
 
+/** Reads one JSON file out of a Wallpaper Engine scene.pkg without loading the whole archive. */
+function readPkgJson(file, name) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const head = Buffer.alloc(Math.min(1 << 20, fs.fstatSync(fd).size));
+    fs.readSync(fd, head, 0, head.length, 0);
+    let o = 0;
+    const u32 = () => { const v = head.readUInt32LE(o); o += 4; return v; };
+    const str = () => { const n = u32(); const v = head.toString('utf8', o, o + n); o += n; return v; };
+    if (!str().startsWith('PKGV')) return null;
+    const count = u32();
+    const entries = [];
+    for (let i = 0; i < count; i++) entries.push({ name: str().replace(/\\/g, '/').toLowerCase(), offset: u32(), length: u32() });
+    const e = entries.find((x) => x.name === name);
+    if (!e || e.length > 64 << 20) return null;
+    const buf = Buffer.alloc(e.length);
+    fs.readSync(fd, buf, 0, e.length, o + e.offset);
+    return JSON.parse(buf.toString('utf8').replace(/^﻿/, ''));
+  } finally { fs.closeSync(fd); }
+}
+
 class Library extends EventEmitter {
   constructor({ settings, userDataDir }) {
     super();
@@ -169,6 +190,25 @@ class Library extends EventEmitter {
       try { it.size = fs.statSync(it.file).size; } catch { /* ignore */ }
     }
     return it;
+  }
+
+  /**
+   * True for scenes built from 3D models (.mdl meshes with a perspective camera). Astral's scene renderer
+   * draws 2D layered scenes only, so these play their animated preview instead of a broken render.
+   * Reads just the scene.json (loose, or from the scene.pkg index), never the whole package.
+   */
+  is3DScene(it) {
+    if (!it || it.type !== 'scene') return false;
+    if (it.is3D !== undefined) return it.is3D;
+    let sc = null;
+    try {
+      const loose = path.join(it.contentDir, it.file || 'scene.json');
+      if (fs.existsSync(loose)) sc = readJson(loose);
+      else sc = readPkgJson(path.join(it.contentDir, 'scene.pkg'), (it.file || 'scene.json').toLowerCase());
+    } catch { sc = null; }
+    const objs = (sc && Array.isArray(sc.objects)) ? sc.objects : [];
+    it.is3D = objs.some((o) => typeof o.model === 'string' && /\.mdl$/i.test(o.model));
+    return it.is3D;
   }
 
   /** Absolute path of the wallpaper's entry file. */

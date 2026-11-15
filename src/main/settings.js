@@ -32,7 +32,7 @@ const DEFAULTS = {
   playlists: [],                    // { id, name, items:[itemId], intervalMin, order:'sequential'|'random', mode:'timer'|'daytime'|'login' }
   activePlaylist: {},               // displayId -> { playlistId, index, startedAt }
   library: { extraFolders: [], imported: [], favorites: [], sort: 'name', filters: {} },
-  workshop: { apiKey: '', defaultSort: 'trend', contentRating: ['Everyone'] },
+  workshop: { apiKey: '', defaultSort: 'trend', contentRating: ['Everyone'], openIn: 'steam' },
   // Optional features. Off = the feature is fully unloaded (no windows, timers or network use).
   features: { widgets: true, rainmeter: true, workshop: true, playlists: true, taskbar: true },
   paused: false,                    // user pressed Pause (restored on next launch)
@@ -41,7 +41,7 @@ const DEFAULTS = {
   presets: [],                     // { name, props }
   globalProps: {},                  // built-in display props applied to every wallpaper
   widgets: [],                      // { id, type, x, y, w, h, displayId, options }
-  rainmeter: { path: '' },
+  rainmeter: { path: '', closeWithApp: false },
   updates: { repo: '', autoCheck: true, lastCheck: 0, skipVersion: '' },
   advanced: { hardwareAcceleration: true, debug: false, keepUIInMemory: false }
 };

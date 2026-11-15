@@ -349,6 +349,54 @@ export class SceneWallpaper {
   }
 
   /** Prepare one effect instance (from scene.json) into executable passes. */
+  /** One shader pass from a material: program, textures and uniform values (effects and custom layer materials). */
+  async buildPass(mp, ip, root, obj) {
+    const src = await this.loadShaderSources(mp.shader, root);
+    if (!src) { console.warn('missing shader', mp.shader); return null; }
+    const textures = [];
+    const texNames = [];
+    const maxSlots = 8;
+    for (let s = 0; s < maxSlots; s++) {
+      const n = (ip.textures && ip.textures[s] !== undefined) ? ip.textures[s] : (mp.textures ? mp.textures[s] : undefined);
+      texNames[s] = n || null;
+    }
+    // Sampler defaults from annotations
+    const combos = { ...src.combos, ...(mp.combos || {}) };
+    for (const [k, v] of Object.entries(ip.combos || {})) combos[k] = Number(this.resolve(v)) || 0;
+    for (const u of src.uniforms) {
+      const m = u.name.match(/^g_Texture(\d+)$/);
+      if (!m || !u.ann) continue;
+      const slot = Number(m[1]);
+      if (!texNames[slot] && u.ann.default && slot > 0) texNames[slot] = u.ann.default;
+      if (u.ann.combo && texNames[slot] && slot > 0) combos[u.ann.combo] = 1;
+    }
+    for (let s = 0; s < maxSlots; s++) {
+      const n = texNames[s];
+      if (n && !String(n).startsWith('_rt_')) textures[s] = await this.texture(n, root);
+      else textures[s] = n ? { rt: n } : null;
+    }
+    const defines = {};
+    for (const [k, v] of Object.entries(combos)) defines[k] = Number(v) || 0;
+    const prog = this.program(mp.shader, src, defines);
+    if (!prog) return null;
+    // Uniform values: annotation defaults < material constants < scene constants
+    const values = {};
+    const consts = { ...(mp.constantshadervalues || {}) };
+    const instConsts = ip.constantshadervalues || {};
+    for (const u of src.uniforms) {
+      if (!u.ann) continue;
+      const keyName = u.ann.material;
+      let val = u.ann.default;
+      if (keyName && keyName in consts) val = consts[keyName];
+      let dyn = null;
+      const cand = [keyName, u.ann.label].filter(Boolean);
+      for (const c of cand) if (c in instConsts) { dyn = instConsts[c]; break; }
+      if (dyn !== null) val = dyn;
+      if (val !== undefined) values[u.name] = { raw: val, slot: { layer: obj && obj.api } };
+    }
+    return { prog, textures, values, blending: mp.blending || 'normal' };
+  }
+
   async loadEffect(eff, obj) {
     const effPath = eff.file;
     const root = effPath.replace(/\/effect\.json$/i, '');
@@ -367,50 +415,9 @@ export class SceneWallpaper {
       const mp = mat.passes[0];
       const ip = instPasses[matIndex] || {};
       matIndex++;
-      const src = await this.loadShaderSources(mp.shader, root);
-      if (!src) { console.warn('missing shader', mp.shader); continue; }
-      const textures = [];
-      const texNames = [];
-      const maxSlots = 8;
-      for (let s = 0; s < maxSlots; s++) {
-        const n = (ip.textures && ip.textures[s] !== undefined) ? ip.textures[s] : (mp.textures ? mp.textures[s] : undefined);
-        texNames[s] = n || null;
-      }
-      // Sampler defaults from annotations
-      const combos = { ...src.combos, ...(mp.combos || {}) };
-      for (const [k, v] of Object.entries(ip.combos || {})) combos[k] = Number(this.resolve(v)) || 0;
-      for (const u of src.uniforms) {
-        const m = u.name.match(/^g_Texture(\d+)$/);
-        if (!m || !u.ann) continue;
-        const slot = Number(m[1]);
-        if (!texNames[slot] && u.ann.default && slot > 0) texNames[slot] = u.ann.default;
-        if (u.ann.combo && texNames[slot] && slot > 0) combos[u.ann.combo] = 1;
-      }
-      for (let s = 0; s < maxSlots; s++) {
-        const n = texNames[s];
-        if (n && !String(n).startsWith('_rt_')) textures[s] = await this.texture(n, root);
-        else textures[s] = n ? { rt: n } : null;
-      }
-      const defines = {};
-      for (const [k, v] of Object.entries(combos)) defines[k] = Number(v) || 0;
-      const prog = this.program(mp.shader, src, defines);
-      if (!prog) continue;
-      // Uniform values: annotation defaults < material constants < scene constants
-      const values = {};
-      const consts = { ...(mp.constantshadervalues || {}) };
-      const instConsts = ip.constantshadervalues || {};
-      for (const u of src.uniforms) {
-        if (!u.ann) continue;
-        const keyName = u.ann.material;
-        let val = u.ann.default;
-        if (keyName && keyName in consts) val = consts[keyName];
-        let dyn = null;
-        const cand = [keyName, u.ann.label].filter(Boolean);
-        for (const c of cand) if (c in instConsts) { dyn = instConsts[c]; break; }
-        if (dyn !== null) val = dyn;
-        if (val !== undefined) values[u.name] = { raw: val, slot: { layer: obj && obj.api } };
-      }
-      passes.push({ prog, textures, values, target: dp.target, bind: dp.bind, blending: mp.blending || 'normal' });
+      const pass = await this.buildPass(mp, ip, root, obj);
+      if (!pass) continue;
+      passes.push({ ...pass, target: dp.target, bind: dp.bind });
     }
     return { passes, fbos, visible: eff.visible, name: eff.name };
   }
@@ -531,7 +538,20 @@ export class SceneWallpaper {
     else if (texName === '_rt_FullFrameBuffer' || model.passthrough) ob.capture = 'region';
     else if (texName) ob.tex = await this.texture(texName);
     else ob.solid = true;
-    const autoSize = ob.tex ? [ob.tex.frameW || ob.tex.width, ob.tex.frameH || ob.tex.height] : [model.width || this.W, model.height || this.H];
+    // A layer with its own (non-generic) material shader, e.g. a flow map that animates several textures:
+    // the model defines the size, and the shader runs as the first pass over the layer.
+    const custom = mp && mp.shader && !/^generic/i.test(mp.shader) && !ob.capture;
+    if (custom) {
+      try {
+        const pass = await this.buildPass(mp, {}, undefined, ob);
+        // Wallpaper Engine gives a material's quad texture coordinates covering only the used part of
+        // its first texture (textures are padded to power-of-two sizes); the shader relies on that.
+        const t0 = pass && pass.textures[0];
+        const uv = t0 && t0.texWidth ? [t0.width / t0.texWidth, t0.height / t0.texHeight] : [1, 1];
+        if (pass) ob.effects.push({ passes: [{ ...pass, blending: 'normal', uv }], fbos: {}, visible: undefined, name: 'material:' + mp.shader });
+      } catch (err) { console.warn('material shader failed', mp.shader, err); }
+    }
+    const autoSize = ob.tex && !(custom && model.width) ? [ob.tex.frameW || ob.tex.width, ob.tex.frameH || ob.tex.height] : [model.width || this.W, model.height || this.H];
     ob.size = model.fullscreen ? [this.W, this.H] : vec(this.resolve(o.size), autoSize);
     if (model.fullscreen) ob.origin = [this.W / 2, this.H / 2, 0];
     for (const e of o.effects || []) {
@@ -860,12 +880,27 @@ export class SceneWallpaper {
           const val = typeof v.raw === 'object' && v.raw !== null && !Array.isArray(v.raw) ? this.resolve(v.raw, v.slot) : v.raw;
           setUniform(gl, u, toUniform(val));
         }
-        gl.bindVertexArray(this.fsVAO);
+        gl.bindVertexArray(pass.uv && (pass.uv[0] !== 1 || pass.uv[1] !== 1) ? this.uvVAO(pass) : this.fsVAO);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         cur = { tex: out.tex, w: out.w, h: out.h, tw: out.w, th: out.h };
       }
     }
     return cur.tex;
+  }
+
+  /** Full-screen quad whose texture coordinates end at pass.uv (cached on the pass). */
+  uvVAO(pass) {
+    if (pass.vao) return pass.vao;
+    const gl = this.gl;
+    const [u, v] = pass.uv;
+    pass.vao = gl.createVertexArray();
+    gl.bindVertexArray(pass.vao);
+    const b = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 0, 0, 1, -1, u, 0, -1, 1, 0, v, 1, 1, u, v]), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
+    return pass.vao;
   }
 
   blitTex(srcTex, dst) {

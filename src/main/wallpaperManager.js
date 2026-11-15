@@ -62,7 +62,11 @@ class WallpaperManager extends EventEmitter {
   // ---------- public API ----------
   async apply(itemId, slotId) {
     const mode = this.layoutMode();
-    const key = mode === 'span' ? 'span' : mode === 'clone' ? 'clone' : (slotId || this.slotsWanted()[0].id);
+    // A display id that isn't connected any more (monitor unplugged / renumbered) would save the choice
+    // somewhere invisible; use the main display instead.
+    const ids = this.slotsWanted().map((w) => w.id);
+    const main = (this.displays().find((d) => d.primary) || {}).id || ids[0];
+    const key = mode === 'span' ? 'span' : mode === 'clone' ? 'clone' : (ids.includes(slotId) ? slotId : main);
     const a = { ...(this.settings.get('wallpaper.assignments') || {}) };
     a[key] = { itemId };
     this.settings.set('wallpaper.assignments', a);
@@ -135,7 +139,7 @@ class WallpaperManager extends EventEmitter {
     return {
       layout: this.layoutMode(),
       paused: this.userPaused,
-      displays: this.displays().map((d) => ({ id: d.id, label: d.label, primary: d.primary, bounds: d.bounds, scaleFactor: d.scaleFactor })),
+      displays: this.displays().map((d) => ({ id: d.id, label: d.label, primary: d.primary, bounds: d.bounds, phys: d.phys, scaleFactor: d.scaleFactor })),
       slots: [...this.slots.entries()].map(([id, s]) => ({ id, itemId: s.item.id, title: s.item.title, type: s.item.type, state: s.state, stopped: !!s.stopped }))
     };
   }
@@ -179,6 +183,8 @@ class WallpaperManager extends EventEmitter {
 
     const embed = () => {
       if (win.isDestroyed()) return;
+      // Developer test mode: render hidden, never touch the real desktop.
+      if (process.env.ASTRAL_OFFSCREEN === '1') { win.setPosition(-20000, -20000); win.showInactive(); return; }
       try {
         const mode = desktop.embedWindow(this.hwnd(win), w.phys);
         slot.embedMode = mode;
@@ -187,6 +193,8 @@ class WallpaperManager extends EventEmitter {
       }
       win.showInactive();
       desktop.embedWindow(this.hwnd(win), w.phys);
+      this.keepVisible();
+      setTimeout(() => this.keepVisible(), 1500);
     };
 
     if (isWeb) {
@@ -222,7 +230,7 @@ class WallpaperManager extends EventEmitter {
     const item = s.item;
     return {
       slot: slotId,
-      item: { id: item.id, type: item.type, supportsAudio: !!item.supportsAudio, title: item.title, dir: item.contentDir, file: item.file, entry: this.library.entryPath(item), preview: item.preview },
+      item: { id: item.id, type: item.type, supportsAudio: !!item.supportsAudio, title: item.title, dir: item.contentDir, file: item.file, entry: this.library.entryPath(item), preview: item.preview, is3D: this.library.is3DScene(item) },
       props: this.resolvedProps(item),
       assetsDir: this.steamInfo.weAssetsDir,
       playback: this.settings.get('playback'),
@@ -333,6 +341,7 @@ class WallpaperManager extends EventEmitter {
         if (s.win && !s.win.isDestroyed()) s.win.destroy();
         s.win = null;
         desktop.refreshSystemWallpaper();
+        setTimeout(() => this.keepVisible(), 400);
       }
       return;
     }
@@ -384,14 +393,24 @@ class WallpaperManager extends EventEmitter {
       if (this.slots.size === 0) return;
       try { this.fgCache = desktop.foregroundState(this.ownPids()); } catch { this.fgCache = { state: 'desktop' }; }
       this.evaluate();
-      // Every ~5 s make sure Explorer hasn't dropped our windows (e.g. after an Explorer restart).
-      if (++tick % 20 === 0) this.checkEmbedding();
+      // Every second make sure Explorer hasn't covered our windows with its static wallpaper, and every
+      // ~5 s that it hasn't dropped them (e.g. after an Explorer restart).
+      ++tick;
+      if (tick % 4 === 0) this.keepVisible();
+      if (tick % 20 === 0) this.checkEmbedding();
     }, 250);
 
     this.startCursorLoop();
   }
 
+  keepVisible() {
+    const hs = [];
+    for (const s of this.slots.values()) if (s.win && !s.win.isDestroyed()) hs.push(this.hwnd(s.win));
+    if (hs.length) { try { desktop.keepAboveStaticWallpaper(hs); } catch { /* explorer restarting */ } }
+  }
+
   checkEmbedding() {
+    if (process.env.ASTRAL_OFFSCREEN === '1') return;
     for (const s of this.slots.values()) {
       if (!s.win || s.win.isDestroyed()) continue;
       const h = this.hwnd(s.win);

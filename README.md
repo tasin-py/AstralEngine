@@ -51,20 +51,20 @@ To be fair about it: while a wallpaper is *playing*, Wallpaper Engine's native D
 <summary><b>Everything Astral can do</b></summary>
 
 **Wallpapers**
-- **Steam Workshop:** finds your Steam libraries and subscribed Wallpaper Engine items automatically. Browse, search, filter, subscribe and unsubscribe in the app (Steam downloads the files; Wallpaper Engine must be owned on that Steam account).
+- **Steam Workshop:** finds your Steam libraries and subscribed Wallpaper Engine items automatically. Browse, search and filter the Workshop with no account or API key. Subscribe opens the wallpaper's page in your Steam app (or your web browser, if you prefer), so Astral never asks for your Steam login; it appears in Installed as soon as Steam downloads it (Wallpaper Engine must be owned on that Steam account).
 - **Scene wallpapers:** native renderer for Wallpaper Engine `scene.pkg` files covering images, effects/shaders, particles, text, sounds, parallax, camera shake, SceneScript and audio response.
 - **Video wallpapers:** MP4/WebM/HEVC with hardware decoding, looping, volume and playback rate.
 - **Web wallpapers:** HTML wallpapers with the Wallpaper Engine web API (user properties, audio listener).
 - **Images**, plus drag-and-drop import of your own files and folders.
-- **Multi-monitor:** a different wallpaper per display, or one stretched/cloned across all of them.
+- **Multi-monitor:** a different wallpaper per display, or one stretched/cloned across all of them. Works with mixed scaling (e.g. 100% + 125%); an "Apply to" picker chooses one display or all of them.
 - **Playlists:** timer, time-of-day or once-per-login rotation, in order or shuffled.
 
 **Customisation**
 - Each wallpaper's own properties (colours, sliders, toggles, combos), with conditions.
 - **Built-in display properties for every wallpaper:** volume, playback rate, alignment (cover/fit/stretch), flip, image filter, and colour options (brightness, contrast, saturation, hue).
 - **Presets:** save, load, apply to all wallpapers, share as JSON, paste JSON, reset.
-- **Desktop widgets:** clock, analog clock, calendar, system monitor, weather, notes, audio visualiser, battery, countdown, photo frame and quotes. They're draggable and lockable, with click-through.
-- **Rainmeter:** list, activate and deactivate skins, load layouts, refresh, edit, and install `.rmskin` packages.
+- **Desktop widgets:** clock, analog clock (8 faces), calendar, system monitor, weather, sticky notes (colours, + for a new note), audio visualiser (9 styles: bars, mirrored, wave, filled wave, circle, ring, dots, LED blocks, lines; gradient or rainbow colours), battery, countdown, photo frame and quotes. Any installed Windows font or one of 15 bundled fonts, border on/off, optional × button, one switch to turn all widgets on or off. Draggable and lockable, with click-through.
+- **Rainmeter:** on/off switch, list, activate and deactivate skins, load layouts, refresh, edit, drag and drop `.rmskin` packages to install them, and find new skins on DeviantArt or VisualSkins.
 - **Taskbar styling:** transparent, blur, acrylic or tinted.
 
 **Performance**
@@ -87,11 +87,11 @@ To be fair about it: while a wallpaper is *playing*, Wallpaper Engine's native D
 | Feature | Wallpaper Engine | Astral |
 |---|:---:|:---:|
 | Steam Workshop wallpapers (scene / video / web) | ✅ | ✅ |
-| Workshop browsing, subscribing | ✅ | ✅ |
+| Workshop browsing, subscribing | ✅ | ✅ (subscribe via the Steam app) |
 | Video wallpapers, hardware decoding | ✅ | ✅ |
 | Scene effects & particles | ✅ | ✅ (most shaders; a few community effects are skipped) |
 | SceneScript | ✅ | ✅ (common API) |
-| 3D models, puppet-warp animation | ✅ | ❌ |
+| 3D scenes (3D models), puppet-warp animation | ✅ | ❌ (3D scenes are detected and marked "not supported yet") |
 | Application (.exe) wallpapers | ✅ | ❌ (blocked for safety) |
 | Built-in props: volume, rate, alignment, flip, filter, colours | ✅ | ✅ |
 | Presets (save / load / apply to all / share JSON) | ✅ | ✅ |
@@ -152,5 +152,8 @@ Astral is free and always will be. If it made your desktop nicer, a coffee keeps
 </p>
 
 ## 📄 License
+
+Third-party components and their licences are listed in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
+
 
 MIT. Wallpaper Engine is a product of its respective owners. Astral is an independent project and isn't affiliated with Wallpaper Engine or Valve. Workshop content belongs to its authors.

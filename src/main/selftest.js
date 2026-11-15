@@ -71,9 +71,70 @@ async function run(ctx) {
     await cap(ui.webContents, 'ui-displays');
     await click('.modal-head .x');
 
+    // ---- Multi-monitor: every display gets its own wallpaper window that covers exactly that monitor ----
+    const { screen } = require('electron');
+    const multimon = async () => {
+      const ds = manager.displays();
+      if (ds.length < 2) { step('multi-monitor', true, { skipped: 'one display' }); return; }
+      const pickMM = ['video', 'scene', 'web'].map((t) => (byType[t] || [])[0]).filter(Boolean);
+      for (const layout of ['per-monitor', 'span', 'clone']) {
+        settings.set('wallpaper.layout', layout);
+        const asg = {};
+        if (layout === 'per-monitor') ds.forEach((d, i) => (asg[d.id] = { itemId: pickMM[i % pickMM.length].id }));
+        else asg[layout] = { itemId: pickMM[0].id };
+        settings.set('wallpaper.assignments', asg);
+        await manager.sync();
+        await sleep(7000);
+        const rows = [];
+        for (const [id, sl] of manager.slots) {
+          if (!sl.win || sl.win.isDestroyed()) { rows.push({ id, error: 'no window' }); continue; }
+          const r = desktop.rectOf(manager.hwnd(sl.win));
+          const got = r && { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top };
+          const want = sl.phys;
+          const page = await sl.win.webContents.executeJavaScript('({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio })').catch((e) => ({ error: String(e) }));
+          const pagePx = page.w && { w: Math.round(page.w * page.dpr), h: Math.round(page.h * page.dpr) };
+          const okRect = got && Math.abs(got.x - want.x) <= 1 && Math.abs(got.y - want.y) <= 1 && Math.abs(got.w - want.width) <= 1 && Math.abs(got.h - want.height) <= 1;
+          const okPage = pagePx && Math.abs(pagePx.w - want.width) <= 2 && Math.abs(pagePx.h - want.height) <= 2;
+          rows.push({ id, type: sl.item.type, embedded: desktop.isEmbedded(manager.hwnd(sl.win)), want, got, page, okRect, okPage });
+          try { await cap(sl.win.webContents, `mm-${layout}-${id}`); } catch { /* ignore */ }
+        }
+        const want = layout === 'span' ? 1 : ds.length; // clone = one window per display showing the same item
+        // Every wallpaper must be above Explorer's static wallpaper layer, otherwise it is invisible.
+        const hs = [...manager.slots.values()].filter((sl) => sl.win && !sl.win.isDestroyed()).map((sl) => manager.hwnd(sl.win));
+        const visible = desktop.keepAboveStaticWallpaper(hs, false);
+        step(`multi-monitor ${layout}`, visible && rows.length === want && rows.every((x) => x.embedded && x.okRect && x.okPage), { visible, displays: ds.map((d) => ({ id: d.id, phys: d.phys, scale: d.scaleFactor, primary: d.primary })), rows });
+      }
+      settings.set('wallpaper.layout', 'per-monitor');
+      // Widgets on every display: right size and position, also after a move within the display.
+      const wrows = [];
+      for (const d of ds) {
+        const w = widgets.add('clock', d.id);
+        await sleep(2500);
+        const win = widgets.windows.get(w.id);
+        const cfg0 = widgets.config(w.id);
+        const r0 = win && desktop.rectOf(manager.hwnd(win));
+        const want = screen.dipToScreenRect(null, { x: Math.round(cfg0.x), y: Math.round(cfg0.y), width: Math.round(cfg0.w), height: Math.round(cfg0.h) });
+        const page = win ? await win.webContents.executeJavaScript('({ w: innerWidth, h: innerHeight, dpr: devicePixelRatio })').catch(() => null) : null;
+        // simulate the user dragging it 40 px left on the same display, then re-read
+        widgets.update(w.id, { x: cfg0.x - 40, y: cfg0.y + 10 });
+        await sleep(800);
+        const cfg1 = widgets.config(w.id);
+        const r1 = win && desktop.rectOf(manager.hwnd(win));
+        const want1 = screen.dipToScreenRect(null, { x: Math.round(cfg1.x), y: Math.round(cfg1.y), width: Math.round(cfg1.w), height: Math.round(cfg1.h) });
+        const g = (r) => r && { x: r.left, y: r.top, w: r.right - r.left, h: r.bottom - r.top };
+        const close = (a, b) => a && b && Math.abs(a.x - b.x) <= 2 && Math.abs(a.y - b.y) <= 2 && Math.abs(a.w - b.width) <= 2 && Math.abs(a.h - b.height) <= 2;
+        const onDisplay = r0 && r0.left >= d.phys.x && r0.right <= d.phys.x + d.phys.width;
+        wrows.push({ display: d.id, scale: d.scaleFactor, cfg0: { x: cfg0.x, y: cfg0.y, w: cfg0.w, h: cfg0.h }, want, got: g(r0), page, afterMove: { want: want1, got: g(r1) }, ok: !!(onDisplay && close(g(r0), want) && close(g(r1), want1)) });
+        try { await cap(win.webContents, 'mm-widget-' + d.id); } catch { /* ignore */ }
+        widgets.remove(w.id);
+      }
+      step('multi-monitor widgets', wrows.every((x) => x.ok), { wrows });
+    };
+    if (process.argv.includes('--multimon')) { await multimon(); return; }
+
     // ---- Wallpapers ----
     const pick = (process.argv.find((a) => a.startsWith('--items=')) || '').slice(8).split(',').filter(Boolean);
-    const toTest = pick.length ? pick.map((id) => library.get(id)).filter(Boolean)
+    const toTest = pick.length ? pick.map((id) => library.get(id) || items.find((x) => x.title.toLowerCase().includes(id.toLowerCase()))).filter(Boolean)
       : ['scene', 'video', 'web', 'image'].flatMap((t) => (byType[t] || []).slice(0, t === 'scene' ? 6 : 1));
     settings.set('wallpaper.layout', 'per-monitor');
     for (const it of toTest) {
@@ -89,8 +150,11 @@ async function run(ctx) {
       const errs = report.errors.length;
       try { const dg = await slot.win.webContents.executeJavaScript('window.__diag && window.__diag()'); fs.writeFileSync(path.join(out, name + '.json'), JSON.stringify(dg, null, 1)); } catch { /* ignore */ }
       const m = app.getAppMetrics();
-      step(`wallpaper ${it.type} "${it.title}"`, embedded, { embedded, mode: slot.embedMode, ms: Date.now() - t0, size, memMB: Math.round(m.reduce((a, x) => a + x.memory.workingSetSize, 0) / 1024), errorsSoFar: errs });
+      step(`wallpaper ${it.type} "${it.title}"`, embedded || process.env.ASTRAL_OFFSCREEN === '1', { embedded, mode: slot.embedMode, ms: Date.now() - t0, size, memMB: Math.round(m.reduce((a, x) => a + x.memory.workingSetSize, 0) / 1024), errorsSoFar: errs });
     }
+
+    if (process.argv.includes('--quick')) return;
+    await multimon();
 
     // ---- Built-in display properties + presets panel ----
     const bi = toTest.find((x) => x.type === 'scene') || toTest[0];
@@ -131,6 +195,46 @@ async function run(ctx) {
     if (wwin) { try { await cap(wwin.webContents, 'widget-clock'); } catch { /* ignore */ } }
     const ws = widgets.windows.get(w2.id);
     if (ws) { try { await cap(ws.webContents, 'widget-sysmon'); } catch { /* ignore */ } }
+
+    // ---- 1.2 widget features: fonts, borders, sticky note +, visualizer styles, clock faces ----
+    const fonts = widgets.fonts();
+    step('installed fonts listed', fonts.length > 20, { count: fonts.length });
+    const note = widgets.add('notes');
+    await sleep(2500);
+    widgets.update(note.id, { options: { noteColor: '#8fc8ff', font: 'Caveat', border: 'none', text: 'hello' } });
+    const n2 = widgets.addNear(note.id, 'notes', { noteColor: '#8fc8ff' });
+    await sleep(2500);
+    const nwin = widgets.windows.get(note.id);
+    const noteDiag = nwin ? await nwin.webContents.executeJavaScript(`({ font: getComputedStyle(document.getElementById('w')).fontFamily, bg: document.getElementById('w').style.background, borderNone: document.body.classList.contains('b-none'), plus: !!document.getElementById('nadd'), fontLoaded: document.fonts.check('16px Caveat') })`).catch((e) => String(e)) : null;
+    step('sticky note: colour, font, border, + button', !!(noteDiag && noteDiag.plus && noteDiag.borderNone && /Caveat/.test(noteDiag.font)) && widgets.windows.has(n2.id) && n2.x !== note.x, { noteDiag, newNoteNextToIt: n2.x !== note.x });
+    if (nwin) { try { await cap(nwin.webContents, 'widget-note'); } catch { /* ignore */ } }
+    const an = widgets.add('analog');
+    const vz = widgets.add('visualizer');
+    await sleep(2500);
+    const faceErr = [];
+    for (const face of ['classic', 'minimal', 'dots', 'numbers', 'roman', 'neon', 'modern', 'skeleton']) {
+      widgets.update(an.id, { options: { face, smooth: face === 'neon' } }); await sleep(400);
+      try { await cap(widgets.windows.get(an.id).webContents, 'widget-analog-' + face); } catch (e) { faceErr.push(face + ': ' + e.message); }
+    }
+    step('analog clock faces', !faceErr.length, { faces: 8, faceErr });
+    const vzErr = [];
+    for (const vizStyle of ['bars', 'mirror', 'wave', 'fill', 'circle', 'ring', 'dots', 'blocks', 'line']) {
+      widgets.update(vz.id, { options: { vizStyle, colorMode: vizStyle === 'circle' ? 'rainbow' : 'gradient', glow: true } }); await sleep(300);
+      // feed a fake spectrum so each style draws something
+      const win = widgets.windows.get(vz.id);
+      const fake = Array.from({ length: 128 }, (_, i) => 0.25 + 0.6 * Math.abs(Math.sin(i / 7)));
+      win.webContents.send('widget:audio', fake); await sleep(250); win.webContents.send('widget:audio', fake); await sleep(250);
+      try { await cap(win.webContents, 'widget-viz-' + vizStyle); } catch (e) { vzErr.push(vizStyle + ': ' + e.message); }
+    }
+    step('visualizer styles', !vzErr.length, { styles: 9, vzErr });
+    for (const x of [note, n2, an, vz]) widgets.remove(x.id);
+
+    // ---- Workshop filters: several boxes checked must still return wallpapers ----
+    try {
+      const workshop = require('./workshop');
+      const r = await workshop.browse({ sort: 'trend', types: ['Scene', 'Video', 'Web'], ratings: ['Everyone'], tags: ['Abstract', 'Animal', 'Landscape', 'Nature', 'Relaxing'] });
+      step('workshop: multi-select filters return results', r.items.length > 0, { items: r.items.length, total: r.total });
+    } catch (e) { step('workshop: multi-select filters return results', false, { error: e.message }); }
 
     // ---- Feature switches: turning Widgets off must unload them completely ----
     const savedFeatures = JSON.parse(JSON.stringify(settings.get('features') || {}));
