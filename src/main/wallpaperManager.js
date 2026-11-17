@@ -225,8 +225,8 @@ class WallpaperManager extends EventEmitter {
 
   /** Data the wallpaper host page asks for at startup. */
   hostInit(slotId) {
-    const s = this.slots.get(slotId);
-    if (!s) return null;
+    const s = this.slots.get(slotId) || (this.saver && this.saver.slots.get(slotId));
+    if (!s || !s.item) return null;
     const item = s.item;
     return {
       slot: slotId,
@@ -299,6 +299,7 @@ class WallpaperManager extends EventEmitter {
 
   desiredState(slot) {
     if (this.userPaused) return 'pause';
+    if (this.saverActive) return 'pause'; // the screensaver covers every display
     const pb = this.settings.get('playback');
     let st = 'run';
     if (this.locked) st = pb.displayAsleepOrLocked === 'stop' ? 'stop' : 'pause';

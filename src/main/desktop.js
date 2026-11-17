@@ -65,6 +65,7 @@ const SystemParametersInfoW = user32.func('bool __stdcall SystemParametersInfoW(
 const ShowWindow = user32.func('bool __stdcall ShowWindow(intptr_t hwnd, int cmd)');
 const GetWindowThreadProcessId = user32.func('uint32 __stdcall GetWindowThreadProcessId(intptr_t hwnd, _Out_ uint32 *pid)');
 const SetWindowCompositionAttribute = user32.func('bool __stdcall SetWindowCompositionAttribute(intptr_t hwnd, AE_WINCOMPATTRDATA *data)');
+const LockWorkStation = user32.func('bool __stdcall LockWorkStation()');
 const DwmGetWindowAttribute = dwmapi.func('int32 __stdcall DwmGetWindowAttribute(intptr_t hwnd, uint32 attr, _Out_ int32 *val, uint32 size)');
 
 const GWL_STYLE = -16;
@@ -311,7 +312,10 @@ function setTaskbarStyle(mode, color = 0x00000000) {
   return ok;
 }
 
+function lockWorkstation() { return LockWorkStation(); }
+
 module.exports = {
+  lockWorkstation,
   hwndFromBuffer, className, findDesktopLayer, embedWindow, moveEmbedded, isEmbedded,
   refreshSystemWallpaper, sendToBottom, setClickThrough, cursorPos, foregroundState,
   setTaskbarStyle, taskbarWindows, ShowWindow, IsWindow, GetParent, trimWorkingSet, rectOf, keepAboveStaticWallpaper

@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <b>Your Wallpaper Engine library, lighter.</b><br>
-  Scenes, videos and web wallpapers from the Steam Workshop, plus widgets and Rainmeter,<br>
+  <b>Free and open source like Lively. Plays your Wallpaper Engine library. Widgets and Rainmeter built in.</b><br>
+  Scenes, videos and web wallpapers from the Steam Workshop, plus your own media,<br>
   in a dark, familiar app that gets out of the way when you're working.
 </p>
 
@@ -82,6 +82,7 @@ To be fair about it: while a wallpaper is *playing*, Wallpaper Engine's native D
 - **Images**, plus drag-and-drop import of your own files and folders.
 - **Multi-monitor:** a different wallpaper per display, or one stretched/cloned across all of them. Works with mixed scaling (e.g. 100% + 125%); an "Apply to" picker chooses one display or all of them.
 - **Playlists:** timer, time-of-day or once-per-login rotation, in order or shuffled.
+- **Screensaver:** after a set number of idle minutes, each display's wallpaper (or one you pick) fills every screen; any key or mouse movement closes it. Optional mute and lock-on-close; never starts over a full-screen game or video. Also in the tray menu.
 
 **Customisation**
 - Each wallpaper's own properties (colours, sliders, toggles, combos), with conditions.
@@ -106,29 +107,43 @@ To be fair about it: while a wallpaper is *playing*, Wallpaper Engine's native D
 
 </details>
 
-## 🆚 Astral vs Wallpaper Engine: what each can do
+## 🆚 Astral vs Wallpaper Engine vs Lively Wallpaper
 
-| Feature | Wallpaper Engine | Astral |
-|---|:---:|:---:|
-| Steam Workshop wallpapers (scene / video / web) | ✅ | ✅ |
-| Workshop browsing, subscribing | ✅ | ✅ (subscribe via the Steam app) |
-| Video wallpapers, hardware decoding | ✅ | ✅ |
-| Scene effects & particles | ✅ | ✅ (most shaders; a few community effects are skipped) |
-| SceneScript | ✅ | ✅ (common API) |
-| 3D scenes (3D models), puppet-warp animation | ✅ | ❌ (3D scenes are detected and marked "not supported yet") |
-| Application (.exe) wallpapers | ✅ | ❌ (blocked for safety) |
-| Built-in props: volume, rate, alignment, flip, filter, colours | ✅ | ✅ |
-| Presets (save / load / apply to all / share JSON) | ✅ | ✅ |
-| Playlists | ✅ | ✅ |
-| Pause/stop rules, per-monitor | ✅ | ✅ |
-| Multi-monitor, span, clone | ✅ | ✅ |
-| Wallpaper editor | ✅ | ❌ |
-| Desktop widgets | ❌ (separate add-ons) | ✅ 11 built in |
-| Rainmeter skin manager | ❌ | ✅ |
-| Taskbar styling | ❌ | ✅ |
-| Feature switches to unload extras | ❌ | ✅ |
-| Library UI fully freed when closed | ❌ | ✅ |
-| Free & open source | ❌ | ✅ |
+Astral sits between the two best-known live wallpaper apps. Like **Lively Wallpaper**, it's free and open source. Like **Wallpaper Engine**, it plays the Steam Workshop library, scene wallpapers included. Neither of them ships desktop widgets or a Rainmeter manager; Astral has both built in.
+
+| Feature | Wallpaper Engine | Lively Wallpaper | Astral |
+|---|:---:|:---:|:---:|
+| Price | Paid (Steam) | Free | **Free** |
+| Open source | ❌ | ✅ GPL-3.0 | ✅ MIT |
+| Video, image and GIF wallpapers | ✅ | ✅ | ✅ |
+| Web (HTML) wallpapers | ✅ | ✅ | ✅ (with the Wallpaper Engine web API) |
+| Steam Workshop wallpapers (scene / video / web)¹ | ✅ | ❌ | ✅ |
+| Browse and search the Workshop in the app | ✅ | ❌ | ✅ (subscribe via the Steam app) |
+| Wallpaper Engine scenes (effects, particles, SceneScript) | ✅ | ❌ | ✅ (most shaders; a few community effects are skipped) |
+| 3D scenes (3D models), puppet-warp animation | ✅ | ❌ | ❌ (detected and marked "not supported yet") |
+| YouTube and online stream wallpapers | ❌ | ✅ | ❌ |
+| Application / game (.exe) wallpapers | ✅ | ✅ | ❌ (blocked for safety) |
+| Screensaver mode | ✅ | ✅ | ✅ |
+| Wallpaper's own properties, presets | ✅ | ✅ (properties) | ✅ (properties, presets, share as JSON) |
+| Built-in props: volume, rate, alignment, flip, filter, colours | ✅ | Partly | ✅ |
+| Playlists (timer, time of day, shuffle) | ✅ | ❌ | ✅ |
+| Pause rules: focused / maximized / fullscreen / battery | ✅ | ✅ (plus per-app rules) | ✅ (per monitor) |
+| Multi-monitor: per display, span, clone | ✅ | ✅ | ✅ (mixed scaling too) |
+| Wallpaper editor | ✅ | ❌ | ❌ |
+| **Desktop widgets** (clock, calendar, weather, notes, visualiser…) | ❌ (separate add-ons) | ❌ | ✅ 11 built in |
+| **Rainmeter skin manager** | ❌ | ❌ | ✅ |
+| Taskbar styling | ❌ | ✅ | ✅ |
+| Feature switches that fully unload extras | ❌ | ❌ | ✅ |
+| Library window freed when closed | ❌ | ✅ | ✅ |
+| Interface languages | Many | Many | English |
+| Where to get it | Steam | Microsoft Store, GitHub | GitHub |
+
+<sub>¹ Workshop wallpapers need Wallpaper Engine owned and installed on your Steam account, whichever app plays them (see the note at the top). Compared with Wallpaper Engine 2.x and Lively Wallpaper 2.2.1.</sub>
+
+**Which one is for you?**
+- **You already own Wallpaper Engine** and want your Workshop library with less background overhead, plus widgets and Rainmeter in one place: **Astral**.
+- **You don't own Wallpaper Engine** and want a free app for your own videos, web wallpapers, widgets and Rainmeter skins: **Astral** or **Lively**. Pick Astral for widgets, Rainmeter, playlists and presets; pick Lively for YouTube streams or app wallpapers.
+- **You need 3D scenes or want to make wallpapers:** Wallpaper Engine.
 
 Astral reads Wallpaper Engine files **read-only**. It never modifies the Wallpaper Engine installation or your Workshop downloads.
 
@@ -180,4 +195,4 @@ Astral is free and always will be. If it made your desktop nicer, a coffee keeps
 Third-party components and their licences are listed in [THIRD_PARTY_NOTICES.txt](THIRD_PARTY_NOTICES.txt).
 
 
-MIT. Wallpaper Engine is a product of its respective owners. Astral is an independent project and isn't affiliated with Wallpaper Engine or Valve. Workshop content belongs to its authors.
+MIT. Wallpaper Engine and Lively Wallpaper are products of their respective owners. Astral is an independent project and isn't affiliated with Wallpaper Engine, Lively Wallpaper or Valve. Workshop content belongs to its authors.

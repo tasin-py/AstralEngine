@@ -15,6 +15,7 @@ const { Widgets } = require('./widgets');
 const { Rainmeter } = require('./rainmeter');
 const updater = require('./updater');
 const { Playlists } = require('./playlists');
+const { Screensaver } = require('./screensaver');
 const desktop = require('./desktop');
 
 const ROOT = path.join(__dirname, '..');
@@ -65,7 +66,7 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'astral', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, corsEnabled: true } }
 ]);
 
-let settings, library, manager, audio, widgets, rainmeter, playlists, steamInfo;
+let settings, library, manager, audio, widgets, rainmeter, playlists, steamInfo, saver;
 let uiWin = null;
 let tray = null;
 let taskbarTimer = null;
@@ -196,6 +197,7 @@ function refreshTray() {
     { label: muted ? 'Unmute' : 'Mute', click: () => { settings.set('audio.muted', !muted); refreshTray(); } },
     ...(feature('playlists') ? [{ label: 'Next wallpaper (playlist)', click: () => playlists.nextAll() }] : []),
     ...(feature('widgets') ? [{ label: wvis ? 'Hide widgets' : 'Show widgets', click: () => { widgets.setVisible(!wvis); refreshTray(); } }] : []),
+    { label: 'Start screensaver', click: () => saver && saver.start(true) },
     { type: 'separator' },
     { label: 'Settings', click: () => { createUI(true); setTimeout(() => sendUI('ui:navigate', 'settings'), 300); } },
     { label: 'Check for updates', click: () => { createUI(true); setTimeout(() => sendUI('ui:navigate', 'updates'), 600); } },
@@ -208,6 +210,7 @@ function refreshTray() {
 
 function quit() {
   quitting = true;
+  try { saver && saver.shutdown(); } catch { /* ignore */ }
   try { manager && manager.shutdown(); } catch { /* ignore */ }
   try { widgets && widgets.stopAll(); } catch { /* ignore */ }
   try { audio && audio.close(); } catch { /* ignore */ }
@@ -439,6 +442,7 @@ function registerIPC() {
 
   // Wallpaper host <-> main
   ipcMain.handle('host:init', (e, slotId) => manager.hostInit(slotId));
+  handle('saver:preview', () => { setTimeout(() => saver.start(true), 300); return true; });
   ipcMain.on('host:error', (e, msg) => { if (settings.get('advanced.debug')) console.warn('[wallpaper]', msg); });
 
   // Widgets
@@ -471,6 +475,8 @@ app.whenReady().then(async () => {
   widgets = new Widgets(settings);
   rainmeter = new Rainmeter(settings);
   playlists = new Playlists({ settings, manager, library });
+  saver = new Screensaver({ settings, library, manager });
+  manager.saver = saver;
   audio.onSamples = (s) => { manager.pushAudio(s); widgets.pushAudio(s); };
   const origAudioNeeds = manager.updateAudioNeeds.bind(manager);
   manager.updateAudioNeeds = () => {
@@ -488,11 +494,13 @@ app.whenReady().then(async () => {
     if (key.startsWith('taskbar')) applyTaskbar();
     if (key.startsWith('audio') || key === 'widgets') manager.updateAudioNeeds();
     if (key.startsWith('features')) applyFeatures();
+    if (key.startsWith('screensaver')) saver.refresh();
   });
 
   applyInstallerChoices();
   applyLoginItem();
   manager.start();
+  saver.refresh();
   await manager.sync();
   applyFeatures();
   setInterval(() => { if (feature('widgets')) widgets.keepOnDesktop(); }, 3000);
@@ -513,7 +521,7 @@ app.whenReady().then(async () => {
   }
   if (persistTest) { require('./selftest').persist(persistTest, { app, settings, manager, createUI, quit }); return; }
   if (isSelfTest) {
-    require('./selftest').run({ app, settings, library, manager, widgets, rainmeter, playlists, createUI, steamInfo });
+    require('./selftest').run({ app, settings, library, manager, widgets, rainmeter, playlists, createUI, steamInfo, saver });
     return;
   }
 
@@ -563,7 +571,7 @@ app.on('will-quit', flushSettings);
 process.on('exit', flushSettings);
 app.whenReady().then(() => { require('electron').powerMonitor.on('shutdown', flushSettings); });
 app.on('window-all-closed', () => { /* stay in tray */ });
-app.on('before-quit', () => { quitting = true; if (manager) manager.shutdown(); if (settings) settings.flush(); closeRainmeterWithApp(); });
+app.on('before-quit', () => { quitting = true; if (saver) saver.shutdown(); if (manager) manager.shutdown(); if (settings) settings.flush(); closeRainmeterWithApp(); });
 // Settings › Rainmeter › "Close Rainmeter when Astral Engine closes" (off by default). Only on a full quit
 // (tray Quit, Windows shutdown); closing the library window keeps Astral running in the tray.
 let rainmeterClosed = false;

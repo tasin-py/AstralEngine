@@ -42,6 +42,8 @@ const DEFAULTS = {
   globalProps: {},                  // built-in display props applied to every wallpaper
   widgets: [],                      // { id, type, x, y, w, h, displayId, options }
   rainmeter: { path: '', closeWithApp: false },
+  // Screensaver mode: idle minutes before it starts; source 'current' (each display's wallpaper) or an item id.
+  screensaver: { enabled: false, idleMinutes: 10, source: 'current', mute: true, lockOnExit: false },
   updates: { repo: '', autoCheck: true, lastCheck: 0, skipVersion: '' },
   advanced: { hardwareAcceleration: true, debug: false, keepUIInMemory: false }
 };

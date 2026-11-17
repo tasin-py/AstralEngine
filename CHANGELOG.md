@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Screensaver mode (Settings › Screensaver): after the idle time you choose, each display's wallpaper, or one wallpaper you pick, fills every screen above windows and the taskbar. Any key or mouse movement closes it. Options: mute, lock the PC when it closes, Preview. Never starts while a full-screen app is in front; desktop wallpapers pause while it shows. "Start screensaver" in the tray menu.
+
 ## 1.2.2
 
 - Uninstaller: "Also uninstall Rainmeter" checkbox (unticked by default). Removes the Rainmeter Astral installed, or runs a normal Rainmeter installation's own uninstaller. Skins in Documents\Rainmeter are kept. A portable Rainmeter inside the Astral folder is always removed with it.

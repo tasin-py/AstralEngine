@@ -60,7 +60,7 @@ async function run(ctx) {
     // Settings dialog pages
     await click('#btn-settings');
     await sleep(800);
-    for (const p of ['performance', 'features', 'general', 'audio', 'taskbar', 'steam', 'rainmeter', 'updates', 'about']) {
+    for (const p of ['performance', 'features', 'general', 'audio', 'taskbar', 'screensaver', 'steam', 'rainmeter', 'updates', 'about']) {
       await click(`.snav button[data-p="${p}"]`);
       await sleep(p === 'steam' || p === 'about' ? 1500 : 600);
       await cap(ui.webContents, 'settings-' + p);
@@ -151,6 +151,27 @@ async function run(ctx) {
       try { const dg = await slot.win.webContents.executeJavaScript('window.__diag && window.__diag()'); fs.writeFileSync(path.join(out, name + '.json'), JSON.stringify(dg, null, 1)); } catch { /* ignore */ }
       const m = app.getAppMetrics();
       step(`wallpaper ${it.type} "${it.title}"`, embedded || process.env.ASTRAL_OFFSCREEN === '1', { embedded, mode: slot.embedMode, ms: Date.now() - t0, size, memMB: Math.round(m.reduce((a, x) => a + x.memory.workingSetSize, 0) / 1024), errorsSoFar: errs });
+    }
+
+    // ---- Screensaver: one full-screen window per display showing that display's wallpaper ----
+    if (process.argv.includes('--saver') && ctx.saver) {
+      const sv = ctx.saver;
+      sv.start(false);
+      await sleep(6000);
+      const rows = [];
+      for (const [id, sl] of sv.slots) {
+        const alive = sl.win && !sl.win.isDestroyed();
+        const init = manager.hostInit(id);
+        const page = alive ? await sl.win.webContents.executeJavaScript('({ w: innerWidth, h: innerHeight, diag: window.__diag ? window.__diag() : null })').catch((e) => ({ error: String(e) })) : null;
+        rows.push({ id, item: sl.item && sl.item.title, type: sl.item && sl.item.type, alive, init: !!init, state: sl.state, page: page && { w: page.w, h: page.h, player: page.diag && (page.diag.player !== false), objects: page.diag && page.diag.objects && page.diag.objects.length } });
+        if (alive) { try { await cap(sl.win.webContents, 'saver-' + id.replace(':', '-')); } catch { /* ignore */ } }
+      }
+      const paused = [...manager.slots.values()].every((x) => x.state === 'pause' || x.state === 'stop');
+      step('screensaver start', sv.active && rows.length === manager.displays().length && rows.every((r) => r.alive && (r.init || !r.item)) && paused, { rows, desktopPaused: paused });
+      sv.stop(false);
+      await sleep(1500);
+      const resumed = !manager.saverActive;
+      step('screensaver stop', !sv.active && sv.slots.size === 0 && resumed, { resumed });
     }
 
     if (process.argv.includes('--quick')) {

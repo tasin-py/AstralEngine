@@ -1108,7 +1108,7 @@ async function updatePlaylistStatus() {
 async function openSettings(startPage = 'performance') {
   state.settings = await api('settings:get');
   const s = state.settings;
-  const pages = [['performance', 'Performance', 'bolt'], ['features', 'Features', 'widgets'], ['general', 'General', 'gear'], ['audio', 'Audio', 'audio'], ['taskbar', 'Taskbar', 'taskbar'], ['steam', 'Steam & Workshop', 'steam'], ['rainmeter', 'Rainmeter', 'drop'], ['updates', 'Updates', 'update'], ['about', 'About & Support', 'coffee']];
+  const pages = [['performance', 'Performance', 'bolt'], ['features', 'Features', 'widgets'], ['general', 'General', 'gear'], ['audio', 'Audio', 'audio'], ['taskbar', 'Taskbar', 'taskbar'], ['screensaver', 'Screensaver', 'display'], ['steam', 'Steam & Workshop', 'steam'], ['rainmeter', 'Rainmeter', 'drop'], ['updates', 'Updates', 'update'], ['about', 'About & Support', 'coffee']];
   const body = el(`<div class="settings"><div class="snav">${pages.map(([id, l, ic]) => `<button data-p="${id}"><i data-icon="${ic}"></i>${l}</button>`).join('')}</div><div class="spage"></div></div>`);
   const m = modal({ title: 'Settings', body, foot: [button('Close', 'btn-accent', () => m.close())] });
   const set = async (k, v) => { state.settings = await api('settings:set', k, v); if (k.startsWith('theme')) applyTheme(); };
@@ -1170,6 +1170,21 @@ async function openSettings(startPage = 'performance') {
         ${row('Tint color', `<input type="color" data-k="taskbar.colorHex" value="${esc((s.taskbar.color || '#000000').slice(0, 7))}">`)}
         ${row('Tint strength', `<input type="range" min="0" max="255" data-k="taskbar.alpha" value="${parseInt((s.taskbar.color || '#00000000').slice(7, 9) || '00', 16)}">`)}
         <div class="banner" style="margin-top:10px">On recent Windows 11 builds Explorer may ignore taskbar styling for some modes; "Transparent" and "Solid color" work most reliably. Choose "Windows default" to restore the normal taskbar.</div></div>`;
+    } else if (p === 'screensaver') {
+      const ss = s.screensaver || {};
+      const assigned = new Set(Object.values((s.wallpaper && s.wallpaper.assignments) || {}).map((a) => a && a.itemId));
+      const pickable = state.items.filter((it) => ['video', 'image', 'scene', 'web'].includes(it.type) && !it.is3D)
+        .sort((a, b) => (assigned.has(b.id) - assigned.has(a.id)) || a.title.localeCompare(b.title));
+      const srcOpts = [['current', 'Each display’s current wallpaper'], ...pickable.map((it) => [it.id, esc(it.title)])];
+      if (ss.source && ss.source !== 'current' && !pickable.some((it) => it.id === ss.source)) srcOpts.push([ss.source, '(wallpaper not found)']);
+      html = `<div class="form"><h3>Screensaver</h3>
+        ${row('Use Astral as a screensaver', chk('screensaver.enabled', !!ss.enabled), 'When you haven’t touched the keyboard or mouse for a while, a wallpaper fills every screen, over your windows and the taskbar. Any key or mouse movement closes it.')}
+        ${row('Start after', `<div style="display:flex;gap:8px;align-items:center"><input type="number" class="num" min="1" max="240" step="1" data-k="screensaver.idleMinutes" value="${Number(ss.idleMinutes) || 10}"><span class="muted unit">minutes</span></div>`, 'Minutes without keyboard or mouse input')}
+        ${row('Show', sel('screensaver.source', ss.source || 'current', srcOpts), 'Each display’s current wallpaper, or one wallpaper on every screen. Displays with no wallpaper go black.')}
+        ${row('Mute sound', chk('screensaver.mute', ss.mute !== false))}
+        ${row('Lock the PC when it closes', chk('screensaver.lockOnExit', !!ss.lockOnExit), 'Like Windows’ “On resume, display logon screen”. You’ll need your PIN or password to get back in.')}
+        ${row('Try it now', `<button class="btn btn-accent" id="ss-preview"><i data-icon="play"></i>Preview</button>`, 'Starts in a moment. Press any key or move the mouse to close it.')}
+        <div class="banner" style="margin-top:12px">It never starts while a full-screen game, video or presentation is in front. Wallpapers on the desktop pause while it's showing. If Windows' own screensaver is also on, set Astral's time shorter, or turn the Windows one off (Settings › Personalisation › Lock screen › Screen saver).</div></div>`;
     } else if (p === 'steam') {
       const st = state.info.steam || {};
       html = `<div class="form"><h3>Steam</h3>
@@ -1222,6 +1237,7 @@ async function openSettings(startPage = 'performance') {
           sp.querySelectorAll('[data-k="playback.fps"]').forEach((o) => { if (o !== inp) o.value = Math.min(o.type === 'range' ? 240 : 360, v); });
         }
         if (k === 'audio.volume') $('#volv', sp).textContent = v;
+        if (k === 'screensaver.idleMinutes') { if (!Number.isFinite(v) || v < 1) return; v = Math.round(Math.min(240, v)); }
         if (k === 'taskbar.colorHex' || k === 'taskbar.alpha') {
           const hex = (sp.querySelector('[data-k="taskbar.colorHex"]') || {}).value || '#000000';
           const a = Number((sp.querySelector('[data-k="taskbar.alpha"]') || {}).value || 0);
@@ -1247,6 +1263,7 @@ async function openSettings(startPage = 'performance') {
     on('notices', () => api('shell:notices'));
     on('repo-link', (e) => { e.preventDefault(); api('shell:open', `https://github.com/${state.info.defaultRepo}/releases`); });
     on('chk-upd', () => checkUpdates(sp));
+    on('ss-preview', async () => { await api('saver:preview'); });
     if (p === 'about') {
       const ms = await api('app:metrics');
       const total = ms.reduce((a, x) => a + x.mem, 0);
